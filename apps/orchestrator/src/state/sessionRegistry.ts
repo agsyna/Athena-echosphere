@@ -95,6 +95,14 @@ export interface ClassroomSession {
    * revocation can stop it early.
    */
   authorizedTurnInProgress: boolean;
+  /**
+   * When the last turn was authorised. Agent state arrives over RTM and is
+   * neither ordered nor guaranteed, so a momentary non-speaking state can clear
+   * `authorizedTurnInProgress` while she is still mid-sentence. This lets a
+   * state change arriving just after that be recognised as the same turn
+   * continuing rather than a new, un-permitted one.
+   */
+  lastAuthorisedTurnAt: number | null;
 
   /**
    * A quiz the agent has been asked to pose but has not reported yet.
@@ -150,6 +158,13 @@ export interface ClassroomSession {
     uuid: string | null;
     cards: WhiteboardPublicState['cards'];
     /**
+     * Presence and scene, mirroring how screen share is modelled: one presenter
+     * at a time, and the orchestrator holds the authoritative drawing so a late
+     * joiner or a reload gets the board as it stands.
+     */
+    presenting: WhiteboardPublicState['presenting'];
+    scene: WhiteboardPublicState['scene'];
+    /**
      * Athena only annotates while the teacher has this on. Without a gate she
      * would write on every turn that happened to contain a definition, which
      * floods a board nobody asked her to touch. Explicit teacher intent is the
@@ -202,6 +217,7 @@ export function createSession(title: string): ClassroomSession {
     activeQuestionerId: null,
     speakPermit: null,
     authorizedTurnInProgress: false,
+    lastAuthorisedTurnAt: null,
     pendingQuiz: null,
     activeQuizSet: null,
     transcript: [],
@@ -218,6 +234,8 @@ export function createSession(title: string): ClassroomSession {
       uuid: null,
       cards: [],
       annotating: false,
+      presenting: null,
+      scene: [],
     },
     raisedHands: new Set(),
     screenShareAllowed: new Set(),
