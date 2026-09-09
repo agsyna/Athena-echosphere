@@ -245,18 +245,26 @@ export default function JoinPage() {
             {role === 'student' && (
               <label className="flex flex-col gap-1.5 border-b pb-4" style={{ borderColor: 'var(--eco-rule)' }}>
                 <span className="eco-label-dim">
-                  Preferred language{' '}
+                  Classroom & Speaking Language{' '}
                   <span className="normal-case tracking-normal text-[var(--eco-cream-faint)]">
                     (optional)
                   </span>
                 </span>
-                <input
+                <select
                   className="rounded-lg border px-3 py-2 text-sm text-[var(--eco-cream)] outline-none transition-colors focus:border-[var(--eco-glow)]"
                   style={{ borderColor: 'var(--eco-rule)', background: 'var(--eco-ink-sunken)' }}
                   value={language}
                   onChange={(e) => setLanguage(e.target.value)}
-                  placeholder="e.g. hi-IN — the AI mirrors whatever you actually speak"
-                />
+                >
+                  <option value="">Default (English)</option>
+                  <option value="fr">Français (French)</option>
+                  <option value="es">Español (Spanish)</option>
+                  <option value="hi">हिन्दी (Hindi)</option>
+                  <option value="de">Deutsch (German)</option>
+                  <option value="ta">தமிழ் (Tamil)</option>
+                  <option value="te">తెలుగు (Telugu)</option>
+                  <option value="en">English</option>
+                </select>
               </label>
             )}
 
@@ -377,8 +385,12 @@ export default function JoinPage() {
             color: 'var(--eco-cream)',
             textShadow: '0 1px 2px rgba(0,0,0,0.4)',
           }}
-        >
-          Powered by Agora, built with love ❤️
+                >
+          <span className="inline-flex items-center gap-1.5">
+            Powered by
+            <img src="/agora-logo.png" alt="Agora" className="h-4 w-auto" />
+            · built with love ❤️
+          </span>
         </p>
       </footer>
     </div>

@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import type { PublicParticipant } from '@echosphere/shared-types';
 import { seatColorVar } from '@/lib/seatColor';
+import { DotLottieReact } from '@lottiefiles/dotlottie-react';
 import { initialsOf } from '@/components/classroom/panels';
 
 interface Tile {
@@ -18,6 +19,49 @@ interface Tile {
   agentPresent?: boolean;
 }
 
+/**
+ * Athena's avatar visual. Which one shows is decided entirely by the
+ * `introPlayed` prop from the parent page — this component holds no state of
+ * its own, because it gets unmounted/remounted every time the stage switches
+ * to the whiteboard or a screen share and back (see page.tsx's conditional
+ * render). Tracking "have I played the intro" locally meant every return to
+ * this view looked like a fresh entrance and replayed the video. The parent
+ * page only resets `introPlayed` to false at the moment "Bring Athena in" is
+ * actually clicked, so it now plays exactly once per real entrance.
+ */
+function AthenaAvatarVisual({
+  introPlayed,
+  onIntroEnd,
+}: {
+  introPlayed: boolean;
+  onIntroEnd: () => void;
+}) {
+  if (!introPlayed) {
+    return (
+      <video
+        key="intro"
+        autoPlay
+        playsInline
+        onEnded={onIntroEnd}
+        onError={onIntroEnd}
+        className="h-full w-full object-cover"
+      >
+        <source src="/athena-intro.mp4" type="video/mp4" />
+      </video>
+    );
+  }
+
+  return (
+    <DotLottieReact
+      key="loop"
+      src="/athena-avatar.lottie"
+      loop
+      autoplay
+      className="h-full w-full"
+    />
+  );
+}
+
 export function ParticipantGrid({
   participants,
   agentPresent,
@@ -26,6 +70,8 @@ export function ParticipantGrid({
   selfUid,
   selfMicEnabled,
   raisedHands = [],
+  introPlayed = true,
+  onIntroEnd,
 }: {
   participants: PublicParticipant[];
   agentPresent: boolean;
@@ -35,6 +81,10 @@ export function ParticipantGrid({
   selfMicEnabled: boolean;
   /** participantIds with a raised hand, from useClassroom's `raisedHands`. */
   raisedHands?: string[];
+  /** Whether the one-time entrance intro has already played this session. */
+  introPlayed?: boolean;
+  /** Called when the intro video finishes (or fails to load). */
+  onIntroEnd?: () => void;
 }) {
   const teacher = participants.find((p) => p.role === 'teacher');
   const students = participants.filter((p) => p.role === 'student');
@@ -129,26 +179,24 @@ export function ParticipantGrid({
           )}
 
           {tile.isAgent ? (
-            <span
-              className={`relative flex h-16 w-16 items-center justify-center rounded-full text-lg font-semibold ${
-                tile.agentPresent && tile.speaking
-                  ? 'eco-orb-speaking'
-                  : tile.agentPresent
-                    ? 'eco-orb-idle'
-                    : ''
-              }`}
-              style={{
-                background: tile.agentPresent
-                  ? 'radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--eco-athena) 55%, transparent), transparent 70%), var(--eco-ink-sunken)'
-                  : 'var(--eco-ink-sunken)',
-                color: 'var(--eco-athena)',
-                boxShadow: tile.agentPresent
-                  ? '0 0 14px 1px color-mix(in srgb, var(--eco-athena) 35%, transparent)'
-                  : 'none',
-              }}
-            >
-              A
-            </span>
+            tile.agentPresent ? (
+              <span className="relative h-72 w-72 overflow-hidden rounded-full">
+                <AthenaAvatarVisual
+                  introPlayed={introPlayed}
+                  onIntroEnd={() => onIntroEnd?.()}
+                />
+              </span>
+            ) : (
+              <span
+                className="relative flex h-16 w-16 items-center justify-center rounded-full text-lg font-semibold"
+                style={{
+                  background: 'var(--eco-ink-sunken)',
+                  color: 'var(--eco-athena)',
+                }}
+              >
+                A
+              </span>
+            )
           ) : (
             <span
               className={`relative flex h-16 w-16 items-center justify-center rounded-full ${

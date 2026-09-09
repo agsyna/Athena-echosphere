@@ -38,22 +38,47 @@ interface GeminiProvider {
 
 type Provider = OpenAiCompatibleProvider | AnthropicProvider | GeminiProvider;
 
-/** Determines active provider based on environment variables. */
-function resolveProvider(): Provider | null {
+/** Returns all configured providers in priority order. */
+function resolveProviders(): Provider[] {
+  const providers: Provider[] = [];
+
   // 1. Google Gemini (Native API)
   const geminiKey = config.geminiApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   if (geminiKey && geminiKey.trim().length > 0) {
-    return {
+    providers.push({
       type: 'gemini',
       key: geminiKey.trim(),
       model: config.geminiModel || process.env.GEMINI_MODEL || 'gemini-3.6-flash',
-    };
+    });
   }
 
-  // 2. Anthropic Claude
+  // 2. OpenAI
+  const openaiKey = config.openaiApiKey || process.env.OPENAI_API_KEY;
+  if (openaiKey && openaiKey.trim().length > 0) {
+    const baseUrl = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '');
+    providers.push({
+      type: 'openai-compatible',
+      url: `${baseUrl}/chat/completions`,
+      model: process.env.OPENAI_MODEL || config.llmModel || 'gpt-4o-mini',
+      headers: { Authorization: `Bearer ${openaiKey.trim()}` },
+    });
+  }
+
+  // 3. Groq
+  const groqKey = process.env.GROQ_API_KEY;
+  if (groqKey && groqKey.trim().length > 0) {
+    providers.push({
+      type: 'openai-compatible',
+      url: 'https://api.groq.com/openai/v1/chat/completions',
+      model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
+      headers: { Authorization: `Bearer ${groqKey.trim()}` },
+    });
+  }
+
+  // 4. Anthropic Claude
   const anthropicKey = config.anthropicApiKey || process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
   if (anthropicKey && anthropicKey.trim().length > 0) {
-    return {
+    providers.push({
       type: 'anthropic',
       url: 'https://api.anthropic.com/v1/messages',
       model: process.env.ANTHROPIC_MODEL || process.env.CLAUDE_MODEL || 'claude-3-5-sonnet-20241022',
@@ -61,67 +86,53 @@ function resolveProvider(): Provider | null {
         'x-api-key': anthropicKey.trim(),
         'anthropic-version': '2023-06-01',
       },
-    };
-  }
-
-  // 3. OpenAI
-  const openaiKey = config.openaiApiKey || process.env.OPENAI_API_KEY;
-  if (openaiKey && openaiKey.trim().length > 0) {
-    const baseUrl = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '');
-    return {
-      type: 'openai-compatible',
-      url: `${baseUrl}/chat/completions`,
-      model: process.env.OPENAI_MODEL || config.llmModel || 'gpt-4o-mini',
-      headers: { Authorization: `Bearer ${openaiKey.trim()}` },
-    };
-  }
-
-  // 4. Groq
-  const groqKey = process.env.GROQ_API_KEY;
-  if (groqKey && groqKey.trim().length > 0) {
-    return {
-      type: 'openai-compatible',
-      url: 'https://api.groq.com/openai/v1/chat/completions',
-      model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
-      headers: { Authorization: `Bearer ${groqKey.trim()}` },
-    };
+    });
   }
 
   // 5. DeepSeek
   const deepseekKey = process.env.DEEPSEEK_API_KEY;
   if (deepseekKey && deepseekKey.trim().length > 0) {
-    return {
+    providers.push({
       type: 'openai-compatible',
       url: 'https://api.deepseek.com/chat/completions',
       model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
       headers: { Authorization: `Bearer ${deepseekKey.trim()}` },
-    };
+    });
   }
 
   // 6. Sarvam
   const sarvamKey = config.sarvamApiKey;
-  if (sarvamKey && sarvamKey !== 'mock_sarvam_api_key') {
-    return {
+  if (sarvamKey && sarvamKey !== 'mock_sarvam_api_key' && sarvamKey !== 'mock_key') {
+    providers.push({
       type: 'openai-compatible',
       url: 'https://api.sarvam.ai/v1/chat/completions',
       model: 'sarvam-105b',
       headers: { Authorization: `Bearer ${sarvamKey}`, 'api-subscription-key': sarvamKey },
-    };
+    });
   }
 
-  return null;
+  return providers;
+}
+
+/** Determines primary provider. */
+function resolveProvider(): Provider | null {
+  const list = resolveProviders();
+  return list.length > 0 ? (list[0] ?? null) : null;
 }
 
 /**
- * Executes chat completion with the active LLM provider.
- * Returns the model's reply text, or `null` if no provider key is configured or call failed.
+ * Whether a model spends completion budget on hidden reasoning tokens, so its
+ * visible reply needs extra headroom to avoid coming back empty.
  */
-export async function tryComplete(
+function isReasoningModel(model: string): boolean {
+  return /gpt-oss|qwen3|reasoner|thinking/i.test(model);
+}
+
+async function executeProvider(
+  provider: Provider,
   messages: ChatMessage[],
-  options: CompleteOptions = {},
+  options: CompleteOptions,
 ): Promise<string | null> {
-  const provider = resolveProvider();
-  if (!provider) return null;
 
   try {
     // 1. Google Gemini Native Handler
@@ -220,6 +231,18 @@ export async function tryComplete(
     }
 
     // 3. OpenAI & OpenAI-compatible providers
+    //
+    // Reasoning models (gpt-oss, qwen3, deepseek-reasoner) spend part of the
+    // completion budget on hidden reasoning tokens that never reach `content`.
+    // At a tight budget they burn all of it thinking and return an empty
+    // string, which reads as "the provider is broken" rather than "the cap was
+    // too low". Gemini already gets this headroom above; mirror it here so a
+    // reasoning model cannot answer blank.
+    const requestedMax = options.maxTokens ?? 700;
+    const maxTokens = isReasoningModel(provider.model)
+      ? Math.max(requestedMax + 1500, 2500)
+      : requestedMax;
+
     const response = await fetch(provider.url, {
       method: 'POST',
       headers: {
@@ -230,7 +253,7 @@ export async function tryComplete(
         model: provider.model,
         messages,
         temperature: options.temperature ?? 0.4,
-        max_tokens: options.maxTokens ?? 700,
+        max_tokens: maxTokens,
       }),
     });
 
@@ -250,3 +273,29 @@ export async function tryComplete(
     return null;
   }
 }
+
+/**
+ * Executes chat completion with the active LLM provider.
+ * Automatically falls back to secondary configured providers if primary fails.
+ */
+export async function tryComplete(
+  messages: ChatMessage[],
+  options: CompleteOptions = {},
+): Promise<string | null> {
+  const providers = resolveProviders();
+  if (providers.length === 0) return null;
+
+  for (const provider of providers) {
+    try {
+      const result = await executeProvider(provider, messages, options);
+      if (result && result.trim().length > 0) {
+        return result;
+      }
+    } catch {
+      // Try next provider
+    }
+  }
+
+  return null;
+}
+
