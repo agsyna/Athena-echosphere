@@ -21,8 +21,7 @@ import { rankedGaps } from '../gaps/gapDetector.js';
 import { tryComplete } from '../llm/complete.js';
 import { getWorkspaceState } from '../workspace/workspaceManager.js';
 import { getTargetedReadings } from './targetedReading.js';
-import { Resend } from 'resend';
-import { config } from '../config.js';
+import { sendMail } from './mailer.js';
 
 export async function generateAbsentStudentPacket(
   session: ClassroomSession,
@@ -151,11 +150,10 @@ import type { AbsentDispatchPayload, AbsentDispatchResult, DispatchChannel } fro
 import { randomUUID } from 'node:crypto';
 
 /**
- * Hardcoded parent recipients for the absent-notification email, per current
- * setup — every dispatched "email" channel goes to both addresses regardless
- * of what the caller passed in `payload.recipientEmail`.
+ * Fallback parent recipients, used only when the caller supplied no
+ * `recipientEmail`. The address typed into the dispatch modal takes precedence.
  */
-const PARENT_RECIPIENTS = [
+const FALLBACK_PARENT_RECIPIENTS = [
   'himanihassija@gmail.com',
 ];
 
@@ -201,7 +199,8 @@ https://echosphere.classroom/session/${session.sessionId}/catchup`;
 
   // 2. Compose the parent notification email — short, hardcoded message per
   // current requirements, distinct from the richer student-facing digest
-  // above. Sent to PARENT_RECIPIENTS regardless of payload.recipientEmail.
+  // above. Sent to payload.recipientEmail, or FALLBACK_PARENT_RECIPIENTS when
+  // the caller supplied none.
   const emailSubject = `Your ward missed today's class — ${session.title}`;
   const emailBodyHtml = `
 <!DOCTYPE html>
@@ -217,25 +216,33 @@ https://echosphere.classroom/session/${session.sessionId}/catchup`;
 </html>
   `.trim();
 
-  // 3. Actually send the email via Resend when the email channel is requested
-  // and a key is configured. Failures are swallowed so a Resend outage or
-  // missing key does not block the rest of the dispatch (WhatsApp link, etc.)
-  // — same graceful-fallback posture as the rest of this codebase's optional
-  // integrations.
-  if (channels.includes('email') && config.resendApiKey) {
-    try {
-      const resend = new Resend(config.resendApiKey);
-      await resend.emails.send({
-        from: 'Athena AI <onboarding@resend.dev>',
-        to: PARENT_RECIPIENTS,
-        subject: emailSubject,
-        html: emailBodyHtml,
-      });
-    } catch (err) {
-      console.error('[absentPacket] Resend send failed:', err);
+  // 3. Actually send the email when the email channel is requested. A failure
+  // no longer blocks the rest of the dispatch (the WhatsApp link is still
+  // returned), but it is no longer silent either: the outcome travels back in
+  // `emailSent`/`emailError` so the caller can show what really happened
+  // instead of an unconditional "sent".
+  let emailSent: boolean | undefined;
+  let emailProvider: 'resend' | 'smtp' | undefined;
+  let emailError: string | undefined;
+
+  if (channels.includes('email')) {
+    const recipients = payload.recipientEmail?.trim()
+      ? [payload.recipientEmail.trim()]
+      : FALLBACK_PARENT_RECIPIENTS;
+
+    const result = await sendMail({
+      to: recipients,
+      subject: emailSubject,
+      html: emailBodyHtml,
+    });
+
+    emailSent = result.ok;
+    emailProvider = result.provider;
+    emailError = result.error;
+
+    if (!result.ok) {
+      console.error('[absentPacket] Email dispatch failed:', result.error);
     }
-  } else if (channels.includes('email') && !config.resendApiKey) {
-    console.warn('[absentPacket] RESEND_API_KEY not configured — email not sent.');
   }
 
   return {
@@ -250,5 +257,8 @@ https://echosphere.classroom/session/${session.sessionId}/catchup`;
     emailSubject,
     emailBodyHtml,
     deliveryReceiptId: receiptId,
+    emailSent,
+    emailProvider,
+    emailError,
   };
 }

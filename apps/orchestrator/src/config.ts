@@ -95,6 +95,26 @@ export const config = {
   resendApiKey: process.env.RESEND_API_KEY,
 
   /**
+   * Sender address for outbound mail.
+   *
+   * Defaults to Resend's shared sandbox sender, which only reliably delivers to
+   * the Resend account owner and has poor reputation with consumer inboxes —
+   * set MAIL_FROM to an address on a domain verified in Resend to make delivery
+   * dependable.
+   */
+  mailFrom: process.env.MAIL_FROM ?? 'Athena AI <onboarding@resend.dev>',
+
+  /**
+   * Optional SMTP fallback (nodemailer), used when Resend is unset or its send
+   * fails. Dormant unless host, user and pass are all provided.
+   */
+  smtpHost: process.env.SMTP_HOST,
+  smtpPort: Number(process.env.SMTP_PORT ?? 587),
+  smtpUser: process.env.SMTP_USER,
+  smtpPass: process.env.SMTP_PASS,
+  smtpFrom: process.env.SMTP_FROM,
+
+  /**
    * Excalidraw+ MCP, which backs Athena's "draw me a diagram" path.
    *
    * The orchestrator is the MCP client here: it calls `create_diagram` and

@@ -118,6 +118,14 @@ export interface AbsentDispatchResult {
   emailSubject: string;
   emailBodyHtml: string;
   deliveryReceiptId: string;
+  /**
+   * Real outcome of the email send, present only when the email channel was
+   * requested. `ok` above reports that the packet was composed; these report
+   * whether it actually left the building.
+   */
+  emailSent?: boolean;
+  emailProvider?: 'resend' | 'smtp';
+  emailError?: string;
 }
 
 export type TeachingAssistantMode = 'step_by_step' | 'socratic_hint' | 'concept_simplify' | 'practice_problem';
