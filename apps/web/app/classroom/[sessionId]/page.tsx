@@ -29,9 +29,7 @@ import { Model3DStage } from '@/components/classroom/Model3DStage';
 import { ExcalidrawBoard } from '@/components/classroom/ExcalidrawBoardLazy';
 import { ClassroomDrawer, type DrawerTab } from '@/components/classroom/ClassroomDrawer';
 import { MiroWorkspacePane } from '@/components/workspace/MiroWorkspacePane';
-import { AbsentStudentPacketModal } from '@/components/support/AbsentStudentPacketModal';
 import { OneOnOneTutorModal } from '@/components/support/OneOnOneTutorModal';
-import { CatchupBookingModal } from '@/components/support/CatchupBookingModal';
 import { LanguageSelector } from '@/components/support/LanguageSelector';
 import { t } from '@/lib/i18n';
 import { useClassroom } from '@/hooks/useClassroom';
@@ -70,9 +68,7 @@ export default function ClassroomPage() {
   const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
   const [micError, setMicError] = useState<string | null>(null);
 
-  const [showAbsentPacket, setShowAbsentPacket] = useState(false);
   const [show1on1Tutor, setShow1on1Tutor] = useState(false);
-  const [showCatchupBooking, setShowCatchupBooking] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -268,34 +264,6 @@ export default function ClassroomPage() {
             title="Open dedicated Socratic AI Teaching Assistant for step-by-step help"
           >
             <span>{t('aiAssistant', lang)}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowCatchupBooking(true)}
-            className="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold shadow-sm transition hover:scale-105"
-            style={{
-              borderColor: 'color-mix(in srgb, var(--eco-blue) 60%, transparent)',
-              background: 'color-mix(in srgb, var(--eco-blue) 15%, transparent)',
-              color: 'var(--eco-blue)',
-            }}
-            title="Schedule a 1:1 tutoring connect with the teacher"
-          >
-            <span>1:1 Connect</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowAbsentPacket(true)}
-            className="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-sm transition hover:scale-105"
-            style={{
-              borderColor: 'var(--eco-rule)',
-              background: 'var(--eco-ink-sunken)',
-              color: 'var(--eco-cream-dim)',
-            }}
-            title="View absent catch-up packet & share via WhatsApp/Email"
-          >
-            <span>Absent Packet</span>
           </button>
 
           <button
@@ -528,13 +496,6 @@ export default function ClassroomPage() {
         />
       )}
 
-      <AbsentStudentPacketModal
-        sessionId={sessionId}
-        isOpen={showAbsentPacket}
-        onClose={() => setShowAbsentPacket(false)}
-        onOpenCatchupBooking={() => setShowCatchupBooking(true)}
-      />
-
       <OneOnOneTutorModal
         sessionId={sessionId}
         studentId={identity.participantId}
@@ -542,14 +503,6 @@ export default function ClassroomPage() {
         isOpen={show1on1Tutor}
         onClose={() => setShow1on1Tutor(false)}
         gaps={view.gaps}
-      />
-
-      <CatchupBookingModal
-        sessionId={sessionId}
-        studentId={identity.participantId}
-        studentName={identity.displayName}
-        isOpen={showCatchupBooking}
-        onClose={() => setShowCatchupBooking(false)}
       />
     </main>
   );
