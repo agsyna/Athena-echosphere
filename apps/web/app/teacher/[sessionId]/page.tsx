@@ -46,6 +46,7 @@ import { Model3DStage } from '@/components/classroom/Model3DStage';
 import { Model3DPicker } from '@/components/classroom/Model3DPicker';
 import { ScreenShareStage } from '@/components/classroom/ScreenShareStageLazy';
 import { ExcalidrawBoard } from '@/components/classroom/ExcalidrawBoardLazy';
+import { DigitalLibraryStage } from '@/components/library/DigitalLibraryStageLazy';
 import { AnnotateToggle } from '@/components/classroom/AnnotateToggle';
 import { ScreenShareControls } from '@/components/classroom/ScreenShareControls';
 import { ClassroomDrawer, type DrawerTab } from '@/components/classroom/ClassroomDrawer';
@@ -525,6 +526,29 @@ export default function TeacherDashboardPage() {
       ),
     },
     {
+      id: 'library',
+      label: 'Digital Library',
+      content: view.libraryBook ? (
+        <DigitalLibraryStage
+          sessionId={sessionId}
+          participantId={identity.participantId}
+          role="teacher"
+          library={view.library}
+          book={view.libraryBook}
+          books={view.libraryBooks}
+          participants={view.participants}
+          onTurnPage={view.turnLibraryPage}
+          onToggleLock={view.toggleLibraryLock}
+          onCitePage={view.citeLibraryPage}
+          onSelectBook={view.selectLibraryBook}
+          onAddBook={view.addLibraryBook}
+          onRemoveBook={view.removeLibraryBook}
+        />
+      ) : (
+        <p className="p-4 text-sm text-[var(--eco-cream-dim)]">Loading textbook…</p>
+      ),
+    },
+    {
       id: 'quizzes',
       label: t('tabQuizzes', lang),
       content: (
@@ -694,6 +718,22 @@ export default function TeacherDashboardPage() {
           >
             {view.activeModel ? 'Stop 3D Model' : '3D Models'}
           </button>
+
+          <button
+            type="button"
+            onClick={() => void view.presentLibrary(!view.library?.isPresenting)}
+            data-active={Boolean(view.library?.isPresenting)}
+            className="eco-action-chip"
+            style={{ '--chip-accent': 'var(--eco-amber)' } as CSSProperties}
+            title={
+              view.library?.isPresenting
+                ? 'Stop showing the textbook to the room'
+                : 'Show the textbook to everyone'
+            }
+          >
+            {view.library?.isPresenting ? 'Stop Textbook' : 'Textbook'}
+          </button>
+
           <AnnotateToggle
             board={view.whiteboard}
             /* This tab can only write once it holds a live board connection. */
@@ -889,6 +929,23 @@ export default function TeacherDashboardPage() {
                     <div className="eco-panel relative min-h-0 flex-1 overflow-hidden">
                       <Model3DStage modelId={view.activeModel.modelId} />
                     </div>
+                  ) : view.library?.isPresenting && view.libraryBook ? (
+                    <DigitalLibraryStage
+                      sessionId={sessionId}
+                      participantId={identity.participantId}
+                      role="teacher"
+                      library={view.library}
+                      book={view.libraryBook}
+                      books={view.libraryBooks}
+                      participants={view.participants}
+                      onTurnPage={view.turnLibraryPage}
+                      onToggleLock={view.toggleLibraryLock}
+                      onCitePage={view.citeLibraryPage}
+                      onSelectBook={view.selectLibraryBook}
+                      onAddBook={view.addLibraryBook}
+                      onRemoveBook={view.removeLibraryBook}
+                      onCloseStage={() => void view.presentLibrary(false)}
+                    />
                   ) : (
                     <ParticipantGrid
                       sessionId={sessionId}

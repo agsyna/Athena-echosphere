@@ -624,3 +624,1270 @@ body::before {
   background: color-mix(in srgb, var(--note-hue) 22%, transparent);
   color: var(--note-hue);
 }
+
+/* ---------------------------------------------------------------------------
+   Athena Digital Library — PageFlip and Synced Textbook Styling
+   --------------------------------------------------------------------------- */
+
+.eco-library-root {
+  --gold: #FFB020;
+  --teal: #2DD4BF;
+  --coral: #FF6B6B;
+  --violet: #A78BFA;
+  --sky: #38BDF8;
+  --paper: #FDFBF4;
+}
+
+/* --- Container & Optical Centering --- */
+.bookwrap {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 480px;
+  width: 100%;
+  overflow: hidden;
+  padding: 4px 0;
+}
+
+#bookshift {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  transition: transform 0.52s cubic-bezier(0.32, 0.72, 0.28, 1);
+}
+
+#book {
+  margin: 0 auto;
+}
+
+/* PageFlip engine containers — no filters or transforms on ancestors */
+.stf__parent {
+  position: relative;
+  z-index: 2;
+  display: block;
+  box-sizing: border-box;
+}
+
+.stf__item {
+  box-shadow: 0 22px 40px rgba(0, 0, 0, 0.55);
+}
+
+/* --- Textbook Pages --- */
+.page {
+  background: var(--paper);
+  color: #20242E;
+  padding: 24px 22px 16px;
+  border: 1px solid #E7E0CE;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  backface-visibility: hidden;
+  box-sizing: border-box;
+}
+
+.page::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(20, 10, 40, 0.07), transparent 8%, transparent 92%, rgba(20, 10, 40, 0.05));
+}
+
+.tab {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 6px;
+  height: 100%;
+  background: var(--gold);
+}
+
+.page[data-a="teal"] .tab { background: var(--teal); }
+.page[data-a="coral"] .tab { background: var(--coral); }
+.page[data-a="violet"] .tab { background: var(--violet); }
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  margin-bottom: 9px;
+  background: #FFF1D6;
+  color: #8A5B06;
+  width: fit-content;
+}
+
+.page[data-a="teal"] .eyebrow { background: #D8F7F1; color: #0B6255; }
+.page[data-a="coral"] .eyebrow { background: #FFE4E1; color: #9A2B22; }
+.page[data-a="violet"] .eyebrow { background: #EDE6FF; color: #4B2C99; }
+
+.page h3 {
+  font-family: var(--font-serif, "Instrument Serif", serif);
+  font-weight: 400;
+  font-size: 22px;
+  line-height: 1.15;
+  margin: 0 0 8px;
+  color: #161B26;
+}
+
+.page p {
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0 0 8px;
+  color: #3B4354;
+}
+
+.page b {
+  color: #1B4F8A;
+}
+
+.work {
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 4px 0 10px;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-line;
+  background: linear-gradient(180deg, #FFF7E6, #FDEFD2);
+  border: 1px solid #F3DFB2;
+  border-left: 4px solid var(--gold);
+  color: #6A4C10;
+}
+
+.page[data-a="teal"] .work {
+  background: linear-gradient(180deg, #EAFBF8, #DAF4EF);
+  border-color: #BFEAE2;
+  border-left-color: var(--teal);
+  color: #0D5A4F;
+}
+
+.page[data-a="coral"] .work {
+  background: linear-gradient(180deg, #FFF0EE, #FDE2DE);
+  border-color: #F6CCC6;
+  border-left-color: var(--coral);
+  color: #8C2F26;
+}
+
+.page[data-a="violet"] .work {
+  background: linear-gradient(180deg, #F4F0FF, #EAE2FD);
+  border-color: #DACFF7;
+  border-left-color: var(--violet);
+  color: #452A8C;
+}
+
+.drill {
+  list-style: none;
+  padding: 0;
+  margin: 2px 0 0;
+}
+
+.drill li {
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 12px;
+  padding: 7px 10px;
+  margin-bottom: 6px;
+  background: #F5F2E7;
+  border-left: 3px solid #DDD5C0;
+  border-radius: 6px;
+  color: #3B4354;
+}
+
+.pnum {
+  margin-top: auto;
+  padding-top: 10px;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 10.5px;
+  color: #A99B7E;
+  text-align: center;
+  letter-spacing: 0.1em;
+}
+
+/* --- Covers --- */
+.page.hard {
+  border: 0;
+  padding: 0;
+  color: #ffffff;
+}
+
+.cover {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 32px 24px;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(155deg, #4C2A8F 0%, #7A35A8 46%, #B0407E 100%);
+  box-sizing: border-box;
+}
+
+.cover::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.9;
+  background:
+    radial-gradient(circle at 20% 16%, rgba(255, 176, 32, 0.85) 0 15px, transparent 16px),
+    radial-gradient(circle at 82% 26%, rgba(45, 212, 191, 0.8) 0 10px, transparent 11px),
+    radial-gradient(circle at 30% 84%, rgba(255, 255, 255, 0.6) 0 7px, transparent 8px),
+    radial-gradient(circle at 74% 90%, rgba(255, 107, 107, 0.85) 0 13px, transparent 14px),
+    radial-gradient(circle at 55% 8%,  rgba(56, 189, 248, 0.6) 0 8px, transparent 9px);
+}
+
+.cover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 30%, rgba(20, 6, 40, 0.42));
+}
+
+.cover > * {
+  position: relative;
+  z-index: 2;
+}
+
+.cover .crest {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  backdrop-filter: blur(4px);
+}
+
+.cover .band {
+  width: 64px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--gold);
+  margin-bottom: 16px;
+}
+
+.cover h2 {
+  font-family: var(--font-serif, "Instrument Serif", serif);
+  font-weight: 400;
+  font-size: 32px;
+  line-height: 1.05;
+  margin: 0 0 10px;
+  text-shadow: 0 3px 20px rgba(0, 0, 0, 0.42);
+}
+
+.cover p {
+  margin: 0;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.86);
+  letter-spacing: 0.11em;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+}
+
+.cover.end {
+  background: linear-gradient(155deg, #0F5D62 0%, #137A6A 48%, #3AA98A 100%);
+}
+
+/* --- Athena Glow Citation Animation --- */
+.glow {
+  animation: libraryGlow 1.6s ease-out;
+}
+
+@keyframes libraryGlow {
+  0% {
+    box-shadow: inset 0 0 0 4px var(--gold), 0 0 52px 8px rgba(255, 176, 32, 0.8);
+  }
+  100% {
+    box-shadow: inset 0 0 0 4px transparent, 0 0 0 0 rgba(255, 176, 32, 0);
+  }
+}
+
+/* --- Chapter Navigator Chips --- */
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--eco-cream-dim, #A093C4);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background 0.16s, color 0.16s;
+}
+
+.chip:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #ffffff;
+}
+
+.chip .sw {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--gold);
+}
+
+.chip[data-c="teal"] .sw { background: var(--teal); }
+.chip[data-c="coral"] .sw { background: var(--coral); }
+.chip[data-c="violet"] .sw { background: var(--violet); }
+
+.chip .n {
+  flex: 1;
+  line-height: 1.2;
+}
+
+.chip.on {
+  background: rgba(255, 255, 255, 0.11);
+  color: #ffffff;
+  border-color: var(--eco-rule, rgba(255, 255, 255, 0.12));
+  font-weight: 500;
+}
+
+.chip.on .sw {
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.15);
+}
+
+/* --- Spread Indicator Dots --- */
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  transition: width 0.28s, background 0.28s;
+}
+
+.dot.on {
+  background: var(--gold);
+  width: 22px;
+  border-radius: 4px;
+  box-shadow: 0 0 12px rgba(255, 176, 32, 0.7);
+}
+
+/* --- Avatars in HUD --- */
+.av.a { background: linear-gradient(135deg, #FFDD8C, #FFB020); }
+.av.b { background: linear-gradient(135deg, #9BF3E6, #2DD4BF); }
+.av.c { background: linear-gradient(135deg, #CFC0FF, #A78BFA); }
+
+@media (prefers-reduced-motion: reduce) {
+  #bookshift {
+    transition: none;
+  }
+  .glow {
+    animation: none;
+    box-shadow: inset 0 0 0 3px var(--gold);
+  }
+}
+
+/* ==========================================================================
+   Athena Digital Library Shelf & Stage Enhancements
+   ========================================================================== */
+
+.digital-library-stage {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 580px;
+  background: radial-gradient(circle at top right, rgba(255, 176, 32, 0.08), transparent 45%),
+              radial-gradient(circle at bottom left, rgba(167, 139, 250, 0.1), transparent 50%),
+              var(--eco-ink, #0c0819);
+  border-radius: 16px;
+  border: 1px solid var(--eco-rule, rgba(255, 255, 255, 0.1));
+  overflow: hidden;
+  position: relative;
+}
+
+.stage-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--eco-rule, rgba(255, 255, 255, 0.08));
+  background: rgba(12, 8, 25, 0.65);
+  backdrop-filter: blur(8px);
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.stage-left-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.stage-brand-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-serif, "Instrument Serif", serif);
+  font-size: 18px;
+  color: #ffffff;
+}
+
+.stage-brand-pill .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--teal, #2DD4BF);
+  box-shadow: 0 0 10px rgba(45, 212, 191, 0.8);
+}
+
+.book-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--eco-cream-dim, #A093C4);
+}
+
+.book-breadcrumb .sep {
+  opacity: 0.4;
+}
+
+.shelf-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--eco-cream, #F1EDFA);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+
+.shelf-nav-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.book-title-tag {
+  font-weight: 600;
+  color: var(--eco-cream, #F1EDFA);
+}
+
+.stage-right-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sound-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--eco-cream, #F1EDFA);
+  cursor: pointer;
+  transition: all 0.18s;
+}
+
+.sound-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.stage-lock-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+
+.stage-lock-btn.locked {
+  background: rgba(255, 176, 32, 0.15);
+  border: 1px solid rgba(255, 176, 32, 0.4);
+  color: var(--gold, #FFB020);
+}
+
+.stage-lock-btn.unlocked {
+  background: rgba(45, 212, 191, 0.15);
+  border: 1px solid rgba(45, 212, 191, 0.4);
+  color: var(--teal, #2DD4BF);
+}
+
+.student-lock-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--eco-cream-dim, #A093C4);
+}
+
+.stage-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  color: var(--eco-cream-dim, #A093C4);
+  cursor: pointer;
+  transition: all 0.18s;
+}
+
+.stage-close-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+/* --- Stage Main Grid Layout --- */
+.stage-main-content {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 20px;
+  padding: 16px 20px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (max-width: 960px) {
+  .stage-main-content {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+    overflow-y: auto;
+  }
+}
+
+.stage-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--eco-rule, rgba(255, 255, 255, 0.07));
+  border-radius: 12px;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.sidebar-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--eco-cream-faint, #6E638D);
+  margin-bottom: 4px;
+}
+
+.chapter-chips-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chapter-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid transparent;
+  color: var(--eco-cream-dim, #A093C4);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.16s;
+}
+
+.chapter-chip:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #ffffff;
+}
+
+.chapter-chip.on {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.chip-swatch {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--gold, #FFB020);
+}
+
+.chapter-chip[data-c="teal"] .chip-swatch { background: var(--teal, #2DD4BF); }
+.chapter-chip[data-c="coral"] .chip-swatch { background: var(--coral, #FF6B6B); }
+.chapter-chip[data-c="violet"] .chip-swatch { background: var(--violet, #A78BFA); }
+
+.chip-title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chip-pnum {
+  font-size: 10px;
+  opacity: 0.6;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+}
+
+.athena-citation-card {
+  margin-top: auto;
+  padding: 12px;
+  border-radius: 10px;
+  background: linear-gradient(145deg, rgba(255, 176, 32, 0.1), rgba(167, 139, 250, 0.05));
+  border: 1px solid rgba(255, 176, 32, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.citation-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--gold, #FFB020);
+}
+
+.citation-desc {
+  font-size: 11px;
+  color: var(--eco-cream-dim, #A093C4);
+  line-height: 1.35;
+  margin: 0;
+}
+
+.athena-cite-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #FFB020 0%, #D97706 100%);
+  border: none;
+  color: #0c0819;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 0 16px rgba(255, 176, 32, 0.4);
+  transition: all 0.18s;
+}
+
+.athena-cite-pill:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 22px rgba(255, 176, 32, 0.65);
+}
+
+/* --- Center Stage & Flipbook --- */
+.stage-center-book {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  min-height: 0;
+}
+
+.flipbook-outer-box {
+  width: 100%;
+  max-width: 740px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.stage-turn-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.nav-arrow-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--eco-cream, #F1EDFA);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.16s;
+}
+
+.nav-arrow-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.nav-arrow-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.spread-dots-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.spread-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  transition: all 0.22s;
+}
+
+.spread-dot.on {
+  width: 18px;
+  border-radius: 4px;
+  background: var(--gold, #FFB020);
+  box-shadow: 0 0 10px rgba(255, 176, 32, 0.7);
+}
+
+.desync-catchup-banner {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 176, 32, 0.12);
+  border: 1px solid rgba(255, 176, 32, 0.35);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--gold, #FFB020);
+}
+
+.catchup-action-btn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--gold, #FFB020);
+  color: #0c0819;
+  font-weight: 600;
+  border: none;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: all 0.16s;
+}
+
+.catchup-action-btn:hover {
+  transform: scale(1.02);
+}
+
+/* --- Right Column RTM Log --- */
+.stage-rtm-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--eco-rule, rgba(255, 255, 255, 0.07));
+  border-radius: 12px;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.rtm-panel-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--eco-cream-faint, #6E638D);
+}
+
+.seats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 6px;
+}
+
+.seat-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+  color: var(--eco-cream, #F1EDFA);
+  transition: all 0.25s;
+}
+
+.seat-badge.ping {
+  background: rgba(45, 212, 191, 0.2);
+  border-color: var(--teal, #2DD4BF);
+  transform: scale(1.04);
+}
+
+.seat-avatar {
+  font-weight: 700;
+  font-size: 10px;
+  color: var(--teal, #2DD4BF);
+}
+
+.seat-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 80px;
+}
+
+.seat-pg {
+  font-size: 9.5px;
+  color: var(--eco-cream-faint, #6E638D);
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+}
+
+.rtm-log-box {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.log-header {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--eco-cream-dim, #A093C4);
+}
+
+.log-entries {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.log-entry {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 10px;
+  color: var(--eco-cream-dim, #A093C4);
+  border-left: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.log-entry.athena {
+  border-left-color: var(--gold, #FFB020);
+  color: var(--gold, #FFB020);
+}
+
+.log-entry.teacher {
+  border-left-color: var(--teal, #2DD4BF);
+  color: var(--teal, #2DD4BF);
+}
+
+.log-entry i {
+  font-style: normal;
+  font-size: 8.5px;
+  opacity: 0.7;
+}
+
+/* --- Shelf View Styles --- */
+.library-shelf-wrapper {
+  padding: 24px;
+  overflow-y: auto;
+  height: 100%;
+}
+
+.shelf-header {
+  margin-bottom: 20px;
+}
+
+.shelf-title {
+  font-family: var(--font-serif, "Instrument Serif", serif);
+  font-size: 28px;
+  color: #ffffff;
+  margin: 0 0 6px;
+}
+
+.shelf-subtitle {
+  font-size: 13px;
+  color: var(--eco-cream-dim, #A093C4);
+  margin: 0;
+}
+
+.shelf-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 20px;
+}
+
+.shelf-book-card {
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--eco-rule, rgba(255, 255, 255, 0.08));
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.22s;
+  position: relative;
+}
+
+.shelf-book-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.shelf-book-card.active {
+  border-color: var(--gold, #FFB020);
+  box-shadow: 0 0 20px rgba(255, 176, 32, 0.2);
+}
+
+.book-spine-cover {
+  height: 140px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: #ffffff;
+  position: relative;
+}
+
+.spine-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.spine-title {
+  font-family: var(--font-serif, "Instrument Serif", serif);
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.spine-footer {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  opacity: 0.8;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+}
+
+.book-card-info {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.book-info-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--eco-cream, #F1EDFA);
+}
+
+.book-info-sub {
+  font-size: 11.5px;
+  color: var(--eco-cream-dim, #A093C4);
+}
+
+.book-info-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.book-kind-badge {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--eco-cream-dim, #A093C4);
+}
+
+.open-now-badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 176, 32, 0.2);
+  color: var(--gold, #FFB020);
+}
+
+.delete-book-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ff6b6b;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.16s;
+  z-index: 5;
+}
+
+.delete-book-btn:hover {
+  background: #ff6b6b;
+  color: #ffffff;
+}
+
+/* --- Shelf Add Cards --- */
+.shelf-add-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 18px;
+  border-radius: 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.015);
+  cursor: pointer;
+  transition: all 0.22s;
+  min-height: 220px;
+}
+
+.shelf-add-card:hover {
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.04);
+  transform: translateY(-3px);
+}
+
+.add-icon-box {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 12px;
+}
+
+.add-icon-box.gold {
+  background: rgba(255, 176, 32, 0.15);
+  color: var(--gold, #FFB020);
+}
+
+.add-icon-box.teal {
+  background: rgba(45, 212, 191, 0.15);
+  color: var(--teal, #2DD4BF);
+}
+
+.add-icon-box.violet {
+  background: rgba(167, 139, 250, 0.15);
+  color: var(--violet, #A78BFA);
+}
+
+.add-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 4px;
+}
+
+.add-card-desc {
+  font-size: 11.5px;
+  color: var(--eco-cream-dim, #A093C4);
+  line-height: 1.4;
+  margin-bottom: 14px;
+}
+
+.add-btn-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--eco-cream, #F1EDFA);
+}
+
+/* --- Modals for Upload / Parse --- */
+.library-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(6px);
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.library-modal-card {
+  width: 100%;
+  max-width: 520px;
+  background: var(--eco-panel, #150E2E);
+  border: 1px solid var(--eco-rule, rgba(255, 255, 255, 0.15));
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.modal-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-title-row h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #ffffff;
+}
+
+.modal-sparkle {
+  color: var(--gold, #FFB020);
+}
+
+.modal-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--eco-cream-dim, #A093C4);
+  cursor: pointer;
+}
+
+.modal-error-banner {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(255, 107, 107, 0.15);
+  border: 1px solid rgba(255, 107, 107, 0.35);
+  color: #ff6b6b;
+  font-size: 12px;
+  margin-bottom: 14px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.form-group label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--eco-cream, #F1EDFA);
+}
+
+.form-group input,
+.form-group textarea {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #ffffff;
+  outline: none;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+  border-color: var(--teal, #2DD4BF);
+}
+
+.parser-tips {
+  font-size: 11px;
+  color: var(--eco-cream-faint, #6E638D);
+}
+
+.parser-disclaimer {
+  font-size: 11.5px;
+  color: var(--eco-cream-dim, #A093C4);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 14px;
+  line-height: 1.4;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.btn-cancel {
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--eco-cream-dim, #A093C4);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-primary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-radius: 8px;
+  background: var(--teal, #2DD4BF);
+  color: #0c0819;
+  font-weight: 700;
+  border: none;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* --- Image / PDF canvas page inside flipbook --- */
+.page.page-image-mode {
+  padding: 0 !important;
+  background: #ffffff;
+}
+
+.pdf-canvas-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+

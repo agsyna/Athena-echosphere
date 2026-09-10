@@ -27,6 +27,7 @@ import { ParticipantGrid } from '@/components/classroom/ParticipantGridLazy';
 import { ScreenShareStage } from '@/components/classroom/ScreenShareStageLazy';
 import { Model3DStage } from '@/components/classroom/Model3DStage';
 import { ExcalidrawBoard } from '@/components/classroom/ExcalidrawBoardLazy';
+import { DigitalLibraryStage } from '@/components/library/DigitalLibraryStageLazy';
 import { ClassroomDrawer, type DrawerTab } from '@/components/classroom/ClassroomDrawer';
 import { MiroWorkspacePane } from '@/components/workspace/MiroWorkspacePane';
 import { OneOnOneTutorModal } from '@/components/support/OneOnOneTutorModal';
@@ -170,6 +171,29 @@ export default function ClassroomPage() {
           agentPresent={Boolean(view.room?.agentId)}
           language={lang}
         />
+      ),
+    },
+    {
+      id: 'library',
+      label: 'Textbook',
+      content: view.libraryBook ? (
+        <DigitalLibraryStage
+          sessionId={sessionId}
+          participantId={identity.participantId}
+          role="student"
+          library={view.library}
+          book={view.libraryBook}
+          books={view.libraryBooks}
+          participants={view.participants}
+          onTurnPage={view.turnLibraryPage}
+          onToggleLock={view.toggleLibraryLock}
+          onCitePage={view.citeLibraryPage}
+          onSelectBook={view.selectLibraryBook}
+          onAddBook={view.addLibraryBook}
+          onRemoveBook={view.removeLibraryBook}
+        />
+      ) : (
+        <p className="p-4 text-sm text-[var(--eco-cream-dim)]">Loading textbook…</p>
       ),
     },
     {
@@ -427,6 +451,22 @@ export default function ClassroomPage() {
                       onSceneChange={() => undefined}
                     />
                   </div>
+                ) : view.library?.isPresenting && view.libraryBook ? (
+                  <DigitalLibraryStage
+                    sessionId={sessionId}
+                    participantId={identity.participantId}
+                    role="student"
+                    library={view.library}
+                    book={view.libraryBook}
+                    books={view.libraryBooks}
+                    participants={view.participants}
+                    onTurnPage={view.turnLibraryPage}
+                    onToggleLock={view.toggleLibraryLock}
+                    onCitePage={view.citeLibraryPage}
+                    onSelectBook={view.selectLibraryBook}
+                    onAddBook={view.addLibraryBook}
+                    onRemoveBook={view.removeLibraryBook}
+                  />
                 ) : view.activeModel ? (
                   <Model3DStage modelId={view.activeModel.modelId} />
                 ) : (
