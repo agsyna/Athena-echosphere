@@ -5,8 +5,11 @@ import {
   AGENT_UID,
   appendTranscript,
   createSession,
+  removeParticipant,
 } from '../src/state/sessionRegistry.ts';
 import { seedUnlikeFractionsLesson } from '../src/lesson/demoUnlikeFractions.ts';
+import Fastify from 'fastify';
+import { classroomRoutes } from '../src/routes/classroom.ts';
 
 let pass = 0;
 const t = async (name: string, fn: () => Promise<void>) => {
@@ -144,6 +147,65 @@ await t('a teacher keeps lesson documents in their grounding', async () => {
     result.sources.some((s) => s.kind === 'lesson'),
     `teacher lost lesson grounding: ${JSON.stringify(result.sources)}`,
   );
+});
+
+// Route level, because the bug was in the route's role guard rather than in
+// `answerCatchup`: the teacher's turns were stored and returned by POST, so
+// every function-level check passed while reopening the panel still came back
+// empty.
+await t('every role can reload its own thread when the panel reopens', async () => {
+  const app = Fastify({ logger: false });
+  await app.register(classroomRoutes);
+  try {
+    const session = createSession('Reopen the panel');
+    const teacher = addParticipant(session, { displayName: 'Ms Rao', role: 'teacher' });
+    const student = addParticipant(session, { displayName: 'Ana', role: 'student' });
+
+    for (const [who, text] of [
+      [teacher.participantId, 'Suggest a check-in question'],
+      [student.participantId, 'What did I miss?'],
+    ] as const) {
+      const sent = await app.inject({
+        method: 'POST',
+        url: `/api/sessions/${session.sessionId}/catchup`,
+        payload: { participantId: who, text },
+      });
+      assert.equal(sent.statusCode, 200, sent.body);
+    }
+
+    for (const [label, who] of [
+      ['teacher', teacher.participantId],
+      ['student', student.participantId],
+    ] as const) {
+      const reopened = await app.inject({
+        method: 'GET',
+        url: `/api/sessions/${session.sessionId}/catchup?participantId=${who}`,
+      });
+      assert.equal(reopened.statusCode, 200, `${label}: ${reopened.body}`);
+      const { history } = reopened.json() as { history: { role: string }[] };
+      assert.equal(history.length, 2, `${label} restored ${history.length} messages`);
+      assert.equal(history[1]?.role, 'athena', `${label}: ${JSON.stringify(history)}`);
+    }
+  } finally {
+    await app.close();
+  }
+});
+
+await t('a participant who has left cannot reload a thread', async () => {
+  const app = Fastify({ logger: false });
+  await app.register(classroomRoutes);
+  try {
+    const session = createSession('Left the room');
+    const teacher = addParticipant(session, { displayName: 'Ms Rao', role: 'teacher' });
+    removeParticipant(session, teacher.participantId);
+    const reopened = await app.inject({
+      method: 'GET',
+      url: `/api/sessions/${session.sessionId}/catchup?participantId=${teacher.participantId}`,
+    });
+    assert.equal(reopened.statusCode, 403, reopened.body);
+  } finally {
+    await app.close();
+  }
 });
 
 console.log(`\n${pass} passing`);

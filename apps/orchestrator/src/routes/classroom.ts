@@ -513,9 +513,12 @@ export async function classroomRoutes(app: FastifyInstance): Promise<void> {
     if (!participant || participant.leftAt !== undefined) {
       return reply.code(403).send({ error: 'Unknown participant' });
     }
-    if (participant.role !== 'student') {
-      return reply.code(403).send({ error: 'Catch-up chat is for students' });
-    }
+    // Any role may read its own thread. This used to refuse anything but a
+    // student, which left the teacher's panel writing a thread it could never
+    // load: POST stores the teacher's turns and returns them, so the
+    // conversation looked fine until the panel was reopened — at which point
+    // the refusal landed in the client's catch handler and reset the view to
+    // the greeting, discarding a thread the server still had.
     return reply.send({ history: catchupHistory(session, participantId) });
   });
 
