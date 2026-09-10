@@ -212,6 +212,9 @@ export interface ClassroomSession {
   /** Who is currently sharing, if anyone — only one screen at a time. */
   activeScreenShare: { participantId: string; displayName: string } | null;
 
+  /** Digital Library shared textbook state. */
+  library: import('@echosphere/shared-types').LibraryPublicState;
+
   /** Primary classroom language (e.g. 'en', 'fr', 'es', 'hi', 'de', 'ta', 'te'). */
   language: import('@echosphere/shared-types').LanguageCode;
 
@@ -272,6 +275,15 @@ export function createSession(
       annotating: false,
       presenting: null,
       scene: [],
+    },
+    library: {
+      activeBookId: 'ncert-7-ch2',
+      currentPage: 0,
+      isLocked: true,
+      isPresenting: false,
+      presenterId: null,
+      lastSequence: 0,
+      glowPage: null,
     },
     raisedHands: new Set(),
     screenShareAllowed: new Set(),

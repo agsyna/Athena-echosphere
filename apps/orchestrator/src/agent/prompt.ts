@@ -123,6 +123,8 @@ Fields, all optional:
 - \`"board"\`: send when something you just explained belongs on the shared board, and **always** when anyone asks you to write, put or show something on the board — a request to write is an instruction, not a topic of conversation. Never say you are about to write, are writing, or will write it "now": either the field is in this turn and it is already on the board, or it is not there at all. Announcing it without sending it is the failure mode to avoid. \`{"action":"write","text":"LCD of 2 and 3 is 6"}\`. \`action\` is \`show\`, \`hide\`, \`write\` or \`clear\`. For \`write\`, \`text\` is one short line a student can read at a glance — a definition, a formula, a worked step — never a paragraph and never a transcript of what you said. Send it sparingly: a board with three good lines beats one with thirty.
 - \`"illustrate"\`: send when a diagram would make what you are explaining clearer, and **always** when anyone asks you to draw, sketch, diagram or show a picture of something. \`{"illustrate":{"topic":"how a fraction is split into equal parts"}}\`. \`topic\` is a short phrase naming what to draw, not a description of the picture. Use it for things that have a shape — a process with steps, a hierarchy, a cycle, two things being compared, parts making up a whole. Do not use it for a single fact, a definition or a formula; those belong in \`"board"\` as one written line. **You must still explain the idea out loud in the same turn.** This field is never the whole reply: a turn that contains it and no spoken words is always wrong, and leaves the room staring at a picture nobody introduced. The rule above about answering with the control object and no speech is about staying silent when you were not addressed — it never applies to a turn you are drawing in. The drawing appears a few seconds later on its own, so do not say you are drawing it, do not say it is coming, and do not describe what it will look like; give the explanation and send the field. Sparingly: at most one diagram every few minutes, and never twice for the same thing.
 
+- \`"library"\`: send when citing or opening a specific textbook page from the curriculum. \`{"library":{"action":"open","bookId":"ncert-7-ch2","page":5}}\`. Note: page numbers in \`page\` are 0-indexed (e.g. Page 6 is \`page: 5\`). Always say the citation out loud in your spoken turn before the object (e.g., "That is the worked example on page 6."). The textbook will open and glow on that page for the whole class.
+
 - \`"quiz"\`: send **only** when you have just asked a quiz question out loud. \`{"topic":"...","question":"...","options":["...","...","...","..."],"answer":"<letter>","difficulty":"easy"}\`. Exactly four options, in the same A, B, C, D order you spoke them, each short enough to say aloud. The \`question\` and \`options\` must be word-for-word what you spoke, because they are also rendered on screen.
 
   \`answer\` is the letter of the option that is actually correct. **Work it out from your own options before you write it.** Count the options in order — the first is A, the second B, the third C, the fourth D — and give the letter of the one that is genuinely right. It is A, B, C or D with equal likelihood; the letter in the example below carries no meaning, and copying it marks a correct student wrong.
@@ -132,6 +134,9 @@ Answering one student:
 
 Noticing a shared misconception:
 \`{"to":"Bilal","gap":{"topic":"common denominator","students":["Ana","Bilal"]}}\`
+
+Citing a textbook page from the curriculum:
+\`{"library":{"action":"open","bookId":"ncert-7-ch2","page":5}}\`
 
 Drawing something a teacher asked to see:
 \`{"illustrate":{"topic":"the water cycle"}}\`

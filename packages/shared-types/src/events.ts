@@ -26,6 +26,12 @@ import type {
 } from './whiteboard.js';
 import type { MiroWorkspaceState, MiroStickyNote, MiroCommand } from './workspace.js';
 import type { TargetedReadingItem, CatchupAvailabilitySlot, LanguageCode } from './support.js';
+import type {
+  LibraryPublicState,
+  LibraryPageTurnPayload,
+  LibraryLockPayload,
+  LibraryPresentPayload,
+} from './library.js';
 
 /** Discriminator prefix so classroom events are never confused with Agora's own. */
 export const ECHOSPHERE_EVENT_PREFIX = 'echosphere:' as const;
@@ -87,7 +93,11 @@ export type ClassroomEvent =
   | { kind: 'echosphere:catchup-slots-updated'; slots: CatchupAvailabilitySlot[] }
   | { kind: 'echosphere:hand-raised'; participantId: string; displayName: string; at: number }
   | { kind: 'echosphere:hand-lowered'; participantId: string }
-  | { kind: 'echosphere:language-changed'; participantId: string; language: LanguageCode };
+  | { kind: 'echosphere:language-changed'; participantId: string; language: LanguageCode }
+  | { kind: 'echosphere:library-state'; state: LibraryPublicState }
+  | { kind: 'echosphere:library-page'; payload: LibraryPageTurnPayload }
+  | { kind: 'echosphere:library-lock'; payload: LibraryLockPayload }
+  | { kind: 'echosphere:library-present'; payload: LibraryPresentPayload };
 
 export type ClassroomEventKind = ClassroomEvent['kind'];
 
@@ -161,6 +171,7 @@ export interface RoomState {
    * anyone is already sharing.
    */
   whiteboard?: WhiteboardPublicState;
+  library?: LibraryPublicState;
   screenShareAllowed?: string[];
   activeScreenShare?: { participantId: string; displayName: string } | null;
   language?: LanguageCode;

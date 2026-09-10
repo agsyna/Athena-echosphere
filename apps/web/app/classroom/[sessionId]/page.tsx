@@ -26,6 +26,7 @@ import {
 import { ParticipantGrid } from '@/components/classroom/ParticipantGrid';
 import { ScreenShareStage } from '@/components/classroom/ScreenShareStageLazy';
 import { ExcalidrawBoard } from '@/components/classroom/ExcalidrawBoardLazy';
+import { DigitalLibraryStage } from '@/components/library/DigitalLibraryStageLazy';
 import { ClassroomDrawer, type DrawerTab } from '@/components/classroom/ClassroomDrawer';
 import { MiroWorkspacePane } from '@/components/workspace/MiroWorkspacePane';
 import { AbsentStudentPacketModal } from '@/components/support/AbsentStudentPacketModal';
@@ -185,6 +186,25 @@ export default function ClassroomPage() {
           role="student"
           readings={view.targetedReadings}
         />
+      ),
+    },
+    {
+      id: 'library',
+      label: 'Textbook',
+      content: view.libraryBook ? (
+        <DigitalLibraryStage
+          sessionId={sessionId}
+          participantId={identity.participantId}
+          role="student"
+          library={view.library}
+          book={view.libraryBook}
+          participants={view.participants}
+          onTurnPage={view.turnLibraryPage}
+          onToggleLock={view.toggleLibraryLock}
+          onCitePage={view.citeLibraryPage}
+        />
+      ) : (
+        <p className="p-4 text-sm text-[var(--eco-cream-dim)]">Loading textbook…</p>
       ),
     },
     {
@@ -452,6 +472,18 @@ export default function ClassroomPage() {
                     onSceneChange={() => undefined}
                   />
                 </div>
+              ) : view.library?.isPresenting && view.libraryBook ? (
+                <DigitalLibraryStage
+                  sessionId={sessionId}
+                  participantId={identity.participantId}
+                  role="student"
+                  library={view.library}
+                  book={view.libraryBook}
+                  participants={view.participants}
+                  onTurnPage={view.turnLibraryPage}
+                  onToggleLock={view.toggleLibraryLock}
+                  onCitePage={view.citeLibraryPage}
+                />
               ) : (
                 <ParticipantGrid
                   participants={view.participants}

@@ -916,6 +916,36 @@ export function applyControl(
     }
   }
 
+  if (control.library) {
+    if (control.library.action === 'open' && typeof control.library.page === 'number') {
+      const targetBookId = control.library.bookId || session.library.activeBookId;
+      session.library.activeBookId = targetBookId;
+      session.library.currentPage = control.library.page;
+      session.library.lastSequence += 1;
+      session.library.glowPage = control.library.page;
+      session.library.isPresenting = true;
+
+      publish(session.sessionId, {
+        kind: 'echosphere:library-page',
+        payload: {
+          bookId: targetBookId,
+          page: control.library.page,
+          seq: session.library.lastSequence,
+          source: 'agent',
+          glow: true,
+        },
+      });
+
+      publish(session.sessionId, {
+        kind: 'echosphere:library-present',
+        payload: {
+          presenting: true,
+          presenterId: null,
+        },
+      });
+    }
+  }
+
   if (control.quiz) {
     // One spoken turn can reach here twice: `issueSetQuestion` recovers the
     // payload from the agent's history, and the same turn also arrives as a

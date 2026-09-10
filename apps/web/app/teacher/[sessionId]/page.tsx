@@ -43,6 +43,7 @@ import {
 import { ParticipantGrid } from '@/components/classroom/ParticipantGrid';
 import { ScreenShareStage } from '@/components/classroom/ScreenShareStageLazy';
 import { ExcalidrawBoard } from '@/components/classroom/ExcalidrawBoardLazy';
+import { DigitalLibraryStage } from '@/components/library/DigitalLibraryStageLazy';
 import { AnnotateToggle } from '@/components/classroom/AnnotateToggle';
 import { ScreenShareControls } from '@/components/classroom/ScreenShareControls';
 import { ClassroomDrawer, type DrawerTab } from '@/components/classroom/ClassroomDrawer';
@@ -534,6 +535,25 @@ export default function TeacherDashboardPage() {
       ),
     },
     {
+      id: 'library',
+      label: 'Textbook',
+      content: view.libraryBook ? (
+        <DigitalLibraryStage
+          sessionId={sessionId}
+          participantId={identity.participantId}
+          role="teacher"
+          library={view.library}
+          book={view.libraryBook}
+          participants={view.participants}
+          onTurnPage={view.turnLibraryPage}
+          onToggleLock={view.toggleLibraryLock}
+          onCitePage={view.citeLibraryPage}
+        />
+      ) : (
+        <p className="p-4 text-sm text-[var(--eco-cream-dim)]">Loading textbook…</p>
+      ),
+    },
+    {
       id: 'quizzes',
       label: t('tabQuizzes', lang),
       content: (
@@ -681,6 +701,21 @@ export default function TeacherDashboardPage() {
             }
           >
             {view.activeWhiteboard ? 'Stop Whiteboard' : 'Whiteboard'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => void view.presentLibrary(!view.library?.isPresenting)}
+            data-active={Boolean(view.library?.isPresenting)}
+            className="eco-action-chip"
+            style={{ '--chip-accent': 'var(--eco-amber)' } as CSSProperties}
+            title={
+              view.library?.isPresenting
+                ? 'Stop showing the textbook to the room'
+                : 'Show the textbook to everyone'
+            }
+          >
+            {view.library?.isPresenting ? 'Stop Textbook' : 'Textbook'}
           </button>
 
           <AnnotateToggle
@@ -873,6 +908,19 @@ export default function TeacherDashboardPage() {
                         onSceneChange={view.pushBoardScene}
                       />
                     </div>
+                  ) : view.library?.isPresenting && view.libraryBook ? (
+                    <DigitalLibraryStage
+                      sessionId={sessionId}
+                      participantId={identity.participantId}
+                      role="teacher"
+                      library={view.library}
+                      book={view.libraryBook}
+                      participants={view.participants}
+                      onTurnPage={view.turnLibraryPage}
+                      onToggleLock={view.toggleLibraryLock}
+                      onCitePage={view.citeLibraryPage}
+                      onCloseStage={() => void view.presentLibrary(false)}
+                    />
                   ) : (
                     <ParticipantGrid
                       participants={view.participants}

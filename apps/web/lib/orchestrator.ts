@@ -19,6 +19,9 @@ import type {
   ActiveWhiteboard,
   BoardElement,
   WhiteboardJoin,
+  LibraryBook,
+  LibraryPublicState,
+  LibrarySearchResult,
 } from '@echosphere/shared-types';
 
 import { getAccessToken } from './supabase';
@@ -467,6 +470,67 @@ export const orchestrator = {
     request<{ original: string; translated: string; language: string }>(
       `/api/sessions/${sessionId}/translate`,
       { method: 'POST', body: JSON.stringify({ text, targetLanguage, sourceLanguage }) },
+    ),
+
+  // ─── Digital Library (Synced Textbook & Athena Citations) ─────────────────
+
+  getLibrary: (sessionId: string) =>
+    request<{
+      state: LibraryPublicState;
+      books: LibraryBook[];
+      currentBook?: LibraryBook;
+    }>(`/api/sessions/${sessionId}/library`),
+
+  turnLibraryPage: (
+    sessionId: string,
+    participantId: string,
+    page: number,
+    bookId?: string,
+  ) =>
+    request<{ ok: boolean; state: LibraryPublicState }>(
+      `/api/sessions/${sessionId}/library/page`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ participantId, page, bookId }),
+      },
+    ),
+
+  lockLibrary: (sessionId: string, participantId: string, locked: boolean) =>
+    request<{ ok: boolean; isLocked: boolean }>(
+      `/api/sessions/${sessionId}/library/lock`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ participantId, locked }),
+      },
+    ),
+
+  presentLibrary: (sessionId: string, participantId: string, presenting: boolean) =>
+    request<{ ok: boolean; isPresenting: boolean }>(
+      `/api/sessions/${sessionId}/library/present`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ participantId, presenting }),
+      },
+    ),
+
+  citeLibraryPage: (
+    sessionId: string,
+    participantId: string,
+    page: number,
+    bookId?: string,
+    citationText?: string,
+  ) =>
+    request<{ ok: boolean; page: number; bookId: string; stagedAudioDelayMs: number }>(
+      `/api/sessions/${sessionId}/library/cite`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ participantId, page, bookId, citationText }),
+      },
+    ),
+
+  findLibraryPage: (sessionId: string, query: string, bookId?: string) =>
+    request<{ result: LibrarySearchResult | null }>(
+      `/api/sessions/${sessionId}/library/find?q=${encodeURIComponent(query)}${bookId ? `&bookId=${encodeURIComponent(bookId)}` : ''}`,
     ),
 
   /**

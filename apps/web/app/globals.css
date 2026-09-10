@@ -624,3 +624,375 @@ body::before {
   background: color-mix(in srgb, var(--note-hue) 22%, transparent);
   color: var(--note-hue);
 }
+
+/* ---------------------------------------------------------------------------
+   Athena Digital Library — PageFlip and Synced Textbook Styling
+   --------------------------------------------------------------------------- */
+
+.eco-library-root {
+  --gold: #FFB020;
+  --teal: #2DD4BF;
+  --coral: #FF6B6B;
+  --violet: #A78BFA;
+  --sky: #38BDF8;
+  --paper: #FDFBF4;
+}
+
+/* --- Container & Optical Centering --- */
+.bookwrap {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 480px;
+  width: 100%;
+  overflow: hidden;
+  padding: 4px 0;
+}
+
+#bookshift {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  transition: transform 0.52s cubic-bezier(0.32, 0.72, 0.28, 1);
+}
+
+#book {
+  margin: 0 auto;
+}
+
+/* PageFlip engine containers — no filters or transforms on ancestors */
+.stf__parent {
+  position: relative;
+  z-index: 2;
+  display: block;
+  box-sizing: border-box;
+}
+
+.stf__item {
+  box-shadow: 0 22px 40px rgba(0, 0, 0, 0.55);
+}
+
+/* --- Textbook Pages --- */
+.page {
+  background: var(--paper);
+  color: #20242E;
+  padding: 24px 22px 16px;
+  border: 1px solid #E7E0CE;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  backface-visibility: hidden;
+  box-sizing: border-box;
+}
+
+.page::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(20, 10, 40, 0.07), transparent 8%, transparent 92%, rgba(20, 10, 40, 0.05));
+}
+
+.tab {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 6px;
+  height: 100%;
+  background: var(--gold);
+}
+
+.page[data-a="teal"] .tab { background: var(--teal); }
+.page[data-a="coral"] .tab { background: var(--coral); }
+.page[data-a="violet"] .tab { background: var(--violet); }
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  margin-bottom: 9px;
+  background: #FFF1D6;
+  color: #8A5B06;
+  width: fit-content;
+}
+
+.page[data-a="teal"] .eyebrow { background: #D8F7F1; color: #0B6255; }
+.page[data-a="coral"] .eyebrow { background: #FFE4E1; color: #9A2B22; }
+.page[data-a="violet"] .eyebrow { background: #EDE6FF; color: #4B2C99; }
+
+.page h3 {
+  font-family: var(--font-serif, "Instrument Serif", serif);
+  font-weight: 400;
+  font-size: 22px;
+  line-height: 1.15;
+  margin: 0 0 8px;
+  color: #161B26;
+}
+
+.page p {
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0 0 8px;
+  color: #3B4354;
+}
+
+.page b {
+  color: #1B4F8A;
+}
+
+.work {
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 4px 0 10px;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-line;
+  background: linear-gradient(180deg, #FFF7E6, #FDEFD2);
+  border: 1px solid #F3DFB2;
+  border-left: 4px solid var(--gold);
+  color: #6A4C10;
+}
+
+.page[data-a="teal"] .work {
+  background: linear-gradient(180deg, #EAFBF8, #DAF4EF);
+  border-color: #BFEAE2;
+  border-left-color: var(--teal);
+  color: #0D5A4F;
+}
+
+.page[data-a="coral"] .work {
+  background: linear-gradient(180deg, #FFF0EE, #FDE2DE);
+  border-color: #F6CCC6;
+  border-left-color: var(--coral);
+  color: #8C2F26;
+}
+
+.page[data-a="violet"] .work {
+  background: linear-gradient(180deg, #F4F0FF, #EAE2FD);
+  border-color: #DACFF7;
+  border-left-color: var(--violet);
+  color: #452A8C;
+}
+
+.drill {
+  list-style: none;
+  padding: 0;
+  margin: 2px 0 0;
+}
+
+.drill li {
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 12px;
+  padding: 7px 10px;
+  margin-bottom: 6px;
+  background: #F5F2E7;
+  border-left: 3px solid #DDD5C0;
+  border-radius: 6px;
+  color: #3B4354;
+}
+
+.pnum {
+  margin-top: auto;
+  padding-top: 10px;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 10.5px;
+  color: #A99B7E;
+  text-align: center;
+  letter-spacing: 0.1em;
+}
+
+/* --- Covers --- */
+.page.hard {
+  border: 0;
+  padding: 0;
+  color: #ffffff;
+}
+
+.cover {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 32px 24px;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(155deg, #4C2A8F 0%, #7A35A8 46%, #B0407E 100%);
+  box-sizing: border-box;
+}
+
+.cover::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.9;
+  background:
+    radial-gradient(circle at 20% 16%, rgba(255, 176, 32, 0.85) 0 15px, transparent 16px),
+    radial-gradient(circle at 82% 26%, rgba(45, 212, 191, 0.8) 0 10px, transparent 11px),
+    radial-gradient(circle at 30% 84%, rgba(255, 255, 255, 0.6) 0 7px, transparent 8px),
+    radial-gradient(circle at 74% 90%, rgba(255, 107, 107, 0.85) 0 13px, transparent 14px),
+    radial-gradient(circle at 55% 8%,  rgba(56, 189, 248, 0.6) 0 8px, transparent 9px);
+}
+
+.cover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 30%, rgba(20, 6, 40, 0.42));
+}
+
+.cover > * {
+  position: relative;
+  z-index: 2;
+}
+
+.cover .crest {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  backdrop-filter: blur(4px);
+}
+
+.cover .band {
+  width: 64px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--gold);
+  margin-bottom: 16px;
+}
+
+.cover h2 {
+  font-family: var(--font-serif, "Instrument Serif", serif);
+  font-weight: 400;
+  font-size: 32px;
+  line-height: 1.05;
+  margin: 0 0 10px;
+  text-shadow: 0 3px 20px rgba(0, 0, 0, 0.42);
+}
+
+.cover p {
+  margin: 0;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.86);
+  letter-spacing: 0.11em;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+}
+
+.cover.end {
+  background: linear-gradient(155deg, #0F5D62 0%, #137A6A 48%, #3AA98A 100%);
+}
+
+/* --- Athena Glow Citation Animation --- */
+.glow {
+  animation: libraryGlow 1.6s ease-out;
+}
+
+@keyframes libraryGlow {
+  0% {
+    box-shadow: inset 0 0 0 4px var(--gold), 0 0 52px 8px rgba(255, 176, 32, 0.8);
+  }
+  100% {
+    box-shadow: inset 0 0 0 4px transparent, 0 0 0 0 rgba(255, 176, 32, 0);
+  }
+}
+
+/* --- Chapter Navigator Chips --- */
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--eco-cream-dim, #A093C4);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background 0.16s, color 0.16s;
+}
+
+.chip:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #ffffff;
+}
+
+.chip .sw {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--gold);
+}
+
+.chip[data-c="teal"] .sw { background: var(--teal); }
+.chip[data-c="coral"] .sw { background: var(--coral); }
+.chip[data-c="violet"] .sw { background: var(--violet); }
+
+.chip .n {
+  flex: 1;
+  line-height: 1.2;
+}
+
+.chip.on {
+  background: rgba(255, 255, 255, 0.11);
+  color: #ffffff;
+  border-color: var(--eco-rule, rgba(255, 255, 255, 0.12));
+  font-weight: 500;
+}
+
+.chip.on .sw {
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.15);
+}
+
+/* --- Spread Indicator Dots --- */
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  transition: width 0.28s, background 0.28s;
+}
+
+.dot.on {
+  background: var(--gold);
+  width: 22px;
+  border-radius: 4px;
+  box-shadow: 0 0 12px rgba(255, 176, 32, 0.7);
+}
+
+/* --- Avatars in HUD --- */
+.av.a { background: linear-gradient(135deg, #FFDD8C, #FFB020); }
+.av.b { background: linear-gradient(135deg, #9BF3E6, #2DD4BF); }
+.av.c { background: linear-gradient(135deg, #CFC0FF, #A78BFA); }
+
+@media (prefers-reduced-motion: reduce) {
+  #bookshift {
+    transition: none;
+  }
+  .glow {
+    animation: none;
+    box-shadow: inset 0 0 0 3px var(--gold);
+  }
+}
+
