@@ -88,7 +88,6 @@ export const TRANSLATIONS = {
     tabTranscript: 'Transcript',
     tabQuizzes: 'Quizzes',
     tabNotes: 'Notes',
-    tabSupport: 'Nobody Left Behind',
     tabReport: 'End Report',
 
     // Actions & Controls
@@ -181,7 +180,6 @@ export const TRANSLATIONS = {
     tabTranscript: 'Transcription',
     tabQuizzes: 'Quiz',
     tabNotes: 'Notes',
-    tabSupport: 'Soutien personnalisé',
     tabReport: 'Rapport final',
 
     // Actions & Controls
@@ -274,7 +272,6 @@ export const TRANSLATIONS = {
     tabTranscript: 'Transcripción',
     tabQuizzes: 'Cuestionarios',
     tabNotes: 'Notas',
-    tabSupport: 'Apoyo al estudiante',
     tabReport: 'Informe final',
 
     // Actions & Controls
@@ -367,7 +364,6 @@ export const TRANSLATIONS = {
     tabTranscript: 'ट्रांसक्रिप्ट',
     tabQuizzes: 'क्विज़',
     tabNotes: 'नोट्स',
-    tabSupport: 'सहायता प्रणाली',
     tabReport: 'अंतिम रिपोर्ट',
 
     // Actions & Controls
@@ -460,7 +456,6 @@ export const TRANSLATIONS = {
     tabTranscript: 'Transkript',
     tabQuizzes: 'Quizze',
     tabNotes: 'Notizen',
-    tabSupport: 'Individuelle Förderung',
     tabReport: 'Abschlussbericht',
 
     // Actions & Controls
@@ -553,7 +548,6 @@ export const TRANSLATIONS = {
     tabTranscript: 'உரை',
     tabQuizzes: 'வினாடி வினா',
     tabNotes: 'குறிப்புகள்',
-    tabSupport: 'மாணவர் ஆதரவு',
     tabReport: 'இறுதி அறிக்கை',
 
     // Actions & Controls
@@ -646,7 +640,6 @@ export const TRANSLATIONS = {
     tabTranscript: 'ట్రాన్స్‌క్రిప్ట్',
     tabQuizzes: 'క్విజ్‌లు',
     tabNotes: 'నోట్స్',
-    tabSupport: 'విద్యార్థి మద్దతు',
     tabReport: 'తుది నివేదిక',
 
     // Actions & Controls

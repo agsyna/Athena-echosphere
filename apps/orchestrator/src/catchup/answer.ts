@@ -1,8 +1,15 @@
 /**
  * Student catch-up answers. Private text — does not start a second Agora
  * ConvoAI agent on the classroom channel (that would speak over the lesson).
- * Grounds replies in transcript + lesson retrieval + workspace notes, then
- *`tryComplete` when a provider key exists.
+ *
+ * A student's reply is grounded in the live class transcript and nothing else:
+ * only what was actually said in the room may be reported as having happened in
+ * class. Questions the transcript does not cover are still answered when they
+ * belong to the subject the class is on; anything off that subject is declined.
+ *
+ * A teacher's reply is unrestricted — lesson documents and workspace notes stay
+ * in their grounding, because that panel is a planning copilot rather than a
+ * record of the lesson.
  */
 
 import type { CatchupMessage, CatchupReply, CatchupSource } from '@echosphere/shared-types';
@@ -64,7 +71,7 @@ export async function answerCatchup(
     return { reply: guardCheck.reason!, sources: [], history };
   }
 
-  const sources = gatherSources(session, text);
+  const sources = gatherSources(session, text, role === 'teacher' ? 'teacher' : 'student');
 
   const generated = await tryComplete(
     [
@@ -96,7 +103,78 @@ export function catchupHistory(
   return session.catchupByParticipant.get(participantId) ?? [];
 }
 
-function gatherSources(session: ClassroomSession, query: string): CatchupSource[] {
+/**
+ * How much of the live transcript a student's answer is grounded in.
+ *
+ * Wider than the teacher's window on purpose. A student's reply may only claim
+ * something happened in class if it is in this block, so the block has to be
+ * big enough for the model to tell "not asked about yet" from "never said" —
+ * three word-matched lines cannot support that judgement.
+ */
+const STUDENT_TRANSCRIPT_WINDOW = 40;
+const STUDENT_TRANSCRIPT_SOURCES = 16;
+const STUDENT_TAIL = 10;
+
+function speakerLabel(speaker: string): string {
+  return speaker === 'agent' ? 'Athena' : speaker === 'teacher' ? 'Teacher' : 'Student';
+}
+
+/**
+ * The spoken record of this class, most recent last.
+ *
+ * Both the lines that match the question and the tail of the lesson are
+ * included: the match is what the student asked about, and the tail is what the
+ * class is doing right now, which is what makes "is this related to our
+ * lesson?" answerable at all.
+ */
+function transcriptSources(session: ClassroomSession, query: string): CatchupSource[] {
+  const recent = rollingTranscript(session, STUDENT_TRANSCRIPT_WINDOW);
+  if (recent.length === 0) return [];
+
+  const words = query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length > 3);
+  const matched = new Set(
+    recent.filter((seg) => {
+      const hay = seg.text.toLowerCase();
+      return words.some((w) => hay.includes(w));
+    }),
+  );
+  for (const seg of recent.slice(-STUDENT_TAIL)) matched.add(seg);
+
+  // Chronological, because the order the class said things in is part of the
+  // meaning — a recap read out of sequence is a different lesson.
+  return recent
+    .filter((seg) => matched.has(seg))
+    .slice(-STUDENT_TRANSCRIPT_SOURCES)
+    .map((seg) => ({
+      kind: 'transcript' as const,
+      snippet: clip(`${speakerLabel(seg.speaker)}: ${seg.text}`),
+    }));
+}
+
+/**
+ * Grounding material for one answer.
+ *
+ * A student gets the spoken transcript and nothing else. Seeded or uploaded
+ * lesson documents are deliberately excluded: `retrieveSync` never returns
+ * empty — on a no-match it falls back to document order — so a lesson document
+ * offered here as "class record" gets narrated back as though the class had
+ * said it, which is exactly how a photosynthesis discussion came back as a
+ * recap of the demo fractions lesson.
+ *
+ * A teacher still gets lesson documents and workspace notes. Their panel is a
+ * planning copilot, not a record of what was said, and it is read by the person
+ * who knows which is which.
+ */
+function gatherSources(
+  session: ClassroomSession,
+  query: string,
+  role: 'teacher' | 'student',
+): CatchupSource[] {
+  if (role === 'student') return transcriptSources(session, query);
+
   const sources: CatchupSource[] = [];
 
   const retrieved = session.lesson.retrieveSync(query, 3);
@@ -114,9 +192,7 @@ function gatherSources(session: ClassroomSession, query: string): CatchupSource[
     .slice(-4);
   const transcriptPick = fromTranscript.length > 0 ? fromTranscript : recent.slice(-3);
   for (const seg of transcriptPick) {
-    const who =
-      seg.speaker === 'agent' ? 'Athena' : seg.speaker === 'teacher' ? 'Teacher' : 'Student';
-    sources.push({ kind: 'transcript', snippet: clip(`${who}: ${seg.text}`) });
+    sources.push({ kind: 'transcript', snippet: clip(`${speakerLabel(seg.speaker)}: ${seg.text}`) });
   }
 
   for (const note of (session.workspace?.notes ?? []).slice(-3)) {
@@ -135,7 +211,7 @@ function catchupSystemPrompt(
   const sourceBlock =
     sources.length > 0
       ? sources.map((s) =>`- [${s.kind}] ${s.snippet}`).join('\n')
-      : '- (no specific classroom notes or spoken transcript for this specific topic)';
+      : '- (nothing has been spoken in this class yet)';
 
   if (role === 'teacher') {
     return`You are Athena, an elite, universal AI Co-Teacher & Pedagogical Assistant helping Teacher ${userName} in "${session.title}".
@@ -151,18 +227,36 @@ Live class record:
 ${sourceBlock}`;
   }
 
-  return`You are Athena, an expert, encouraging AI Tutor & Educational Assistant helping student ${userName} in "${session.title}".
-You have deep, comprehensive knowledge across ALL educational topics (Mathematics, Algebra, Geometry, Physics, Chemistry, Biology, History, Geography, Computer Science, Literature, Grammar, Study Skills, and Homework Help).
+  const hasTranscript = sources.length > 0;
 
-GUIDELINES:
-1. Answer ANY and ALL educational questions thoroughly, accurately, and step-by-step with intuitive real-world analogies and examples.
-2. If the student asks about what was said in the current class or what they missed, prioritize the classroom record below.
-3. If the student asks about other educational subjects (e.g. "What is photosynthesis?", "How to solve 3x+7=22?", "Explain gravity", "Who wrote Romeo and Juliet?"), answer clearly and pedagogically!
-4. Only decline non-educational entertainment/gossip (e.g., video games, celebrity gossip) and politely invite them to ask about school subjects.
-5. Format formulas, numbered steps, and key concepts cleanly with bolding and bullet points.
+  return`You are Athena, an encouraging AI tutor helping student ${userName} in the live class "${session.title}".
 
-Current class record:
-${sourceBlock}`;
+The CLASS TRANSCRIPT below is the complete, word-for-word record of everything spoken in this class so far. It is your only knowledge of what has actually happened in the room.
+
+CLASS TRANSCRIPT:
+${sourceBlock}
+
+WHAT THIS CLASS IS ABOUT: ${
+    hasTranscript
+      ? 'whatever subject the transcript above is actually about. Work that out from the transcript itself. The lesson is titled "' +
+        session.title +
+        '", but the transcript is what the class is really doing, and it wins whenever the two disagree.'
+      : 'the transcript is EMPTY — nothing has been spoken in this class yet — so go by the lesson title, "' +
+        session.title +
+        '".'
+  }
+
+RULES — follow all of them, in this order:
+1. The transcript is the ONLY source for what was said, taught, covered, asked or written in this class. When the student asks what they missed, what was just said, what the teacher said, or for a recap, answer STRICTLY from the transcript above: summarise it in your own words and name who said each part. You may quote it.
+2. NEVER state or imply that something was said, taught or covered in class unless it appears in the transcript above. Do not invent lessons, examples, worked problems or teacher remarks. ${
+    hasTranscript
+      ? 'If the transcript does not cover what they asked about, say plainly that it has not come up in class yet — then still help them under rule 3 or 4.'
+      : 'Nothing has been spoken yet, so say so plainly if they ask what they missed or what was said — then still help them under rule 4.'
+  }
+3. Anything the transcript touches on is always fair to help with, and you may go well beyond repeating it: re-explain it more slowly, break it into steps, give a real-world analogy, or set a practice problem. Answer follow-up questions that dig deeper into any subject the transcript raises, even where the transcript itself does not contain the answer — say when the explanation is your own rather than the teacher's.
+4. A question the transcript does not cover but which belongs to the same subject as this class is also fair to answer: explain it fully from your own knowledge, clearly and step by step, and make clear it is your own explanation rather than something from the lesson.
+5. Only if the question belongs to a plainly different subject, or is not schoolwork at all, decline it: say it is outside what this class is on and invite a question about the lesson. Never decline something the transcript raised.
+6. Reply in plain sentences and simple dashed lists. Do NOT use markdown or LaTeX — no **, no ##, no $...$ or \\[...\\] — because this chat window shows those symbols literally. Write formulas as plain text, such as 2/5 + 1/10 = 1/2.`;
 }
 
 function fallbackReply(question: string, sources: CatchupSource[], sessionTitle: string): string {

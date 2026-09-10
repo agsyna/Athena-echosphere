@@ -60,7 +60,6 @@ import { RestraintMeter } from '@/components/meraki/RestraintMeter';
 import { SuppressedInterventionsPanel } from '@/components/meraki/SuppressedInterventionsPanel';
 import { MiroWorkspacePane } from '@/components/workspace/MiroWorkspacePane';
 import { AbsentStudentPacketModal } from '@/components/support/AbsentStudentPacketModal';
-import { TargetedReadingPanel } from '@/components/support/TargetedReadingPanel';
 import { CatchupBookingModal } from '@/components/support/CatchupBookingModal';
 import { LanguageSelector } from '@/components/support/LanguageSelector';
 import { CatchupChatbot } from '@/components/classroom/CatchupChatbot';
@@ -416,19 +415,6 @@ export default function TeacherDashboardPage() {
           participants={view.participants}
           agentPresent={Boolean(view.room?.agentId)}
           language={lang}
-        />
-      ),
-    },
-    {
-      id: 'reading',
-      label: t('tabSupport', lang),
-      content: (
-        <TargetedReadingPanel
-          sessionId={sessionId}
-          participantId={identity.participantId}
-          role="teacher"
-          readings={view.targetedReadings}
-          onRefresh={() => void orchestrator.getTargetedReadings(sessionId)}
         />
       ),
     },

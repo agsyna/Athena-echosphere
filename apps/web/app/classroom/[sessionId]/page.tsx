@@ -31,7 +31,6 @@ import { ClassroomDrawer, type DrawerTab } from '@/components/classroom/Classroo
 import { MiroWorkspacePane } from '@/components/workspace/MiroWorkspacePane';
 import { AbsentStudentPacketModal } from '@/components/support/AbsentStudentPacketModal';
 import { OneOnOneTutorModal } from '@/components/support/OneOnOneTutorModal';
-import { TargetedReadingPanel } from '@/components/support/TargetedReadingPanel';
 import { CatchupBookingModal } from '@/components/support/CatchupBookingModal';
 import { LanguageSelector } from '@/components/support/LanguageSelector';
 import { t } from '@/lib/i18n';
@@ -174,18 +173,6 @@ export default function ClassroomPage() {
           participants={view.participants}
           agentPresent={Boolean(view.room?.agentId)}
           language={lang}
-        />
-      ),
-    },
-    {
-      id: 'reading',
-      label: t('tabSupport', lang),
-      content: (
-        <TargetedReadingPanel
-          sessionId={sessionId}
-          participantId={identity.participantId}
-          role="student"
-          readings={view.targetedReadings}
         />
       ),
     },
