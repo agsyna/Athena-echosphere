@@ -536,7 +536,7 @@ export default function TeacherDashboardPage() {
     },
     {
       id: 'library',
-      label: 'Textbook',
+      label: 'Digital Library',
       content: view.libraryBook ? (
         <DigitalLibraryStage
           sessionId={sessionId}
@@ -544,10 +544,14 @@ export default function TeacherDashboardPage() {
           role="teacher"
           library={view.library}
           book={view.libraryBook}
+          books={view.libraryBooks}
           participants={view.participants}
           onTurnPage={view.turnLibraryPage}
           onToggleLock={view.toggleLibraryLock}
           onCitePage={view.citeLibraryPage}
+          onSelectBook={view.selectLibraryBook}
+          onAddBook={view.addLibraryBook}
+          onRemoveBook={view.removeLibraryBook}
         />
       ) : (
         <p className="p-4 text-sm text-[var(--eco-cream-dim)]">Loading textbook…</p>
@@ -915,10 +919,14 @@ export default function TeacherDashboardPage() {
                       role="teacher"
                       library={view.library}
                       book={view.libraryBook}
+                      books={view.libraryBooks}
                       participants={view.participants}
                       onTurnPage={view.turnLibraryPage}
                       onToggleLock={view.toggleLibraryLock}
                       onCitePage={view.citeLibraryPage}
+                      onSelectBook={view.selectLibraryBook}
+                      onAddBook={view.addLibraryBook}
+                      onRemoveBook={view.removeLibraryBook}
                       onCloseStage={() => void view.presentLibrary(false)}
                     />
                   ) : (

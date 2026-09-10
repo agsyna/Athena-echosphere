@@ -8,6 +8,9 @@ import type {
   Role,
 } from '@echosphere/shared-types';
 import { FlipBook } from './FlipBook';
+import { ShelfView } from './ShelfView';
+import { isSoundEnabled, setSoundEnabled } from './sound';
+import { Volume2, VolumeX, Library, ArrowLeft, Lock, Unlock, Sparkles, ChevronLeft, ChevronRight, X } from 'lucide-react';
 
 export interface DigitalLibraryStageProps {
   sessionId: string;
@@ -15,18 +18,15 @@ export interface DigitalLibraryStageProps {
   role: Role;
   library: LibraryPublicState | null;
   book: LibraryBook;
+  books?: LibraryBook[];
   participants: PublicParticipant[];
   onTurnPage: (page: number) => Promise<void>;
   onToggleLock: (locked: boolean) => Promise<void>;
   onCitePage: (page: number, citationText?: string) => Promise<void>;
+  onSelectBook?: (bookId: string) => Promise<void>;
+  onAddBook?: (book: LibraryBook) => Promise<void>;
+  onRemoveBook?: (bookId: string) => Promise<void>;
   onCloseStage?: () => void;
-}
-
-interface RtmLogEntry {
-  id: string;
-  label: string;
-  payload: string;
-  kind?: 'athena' | 'sys' | 'teacher';
 }
 
 export function DigitalLibraryStage({
@@ -35,27 +35,33 @@ export function DigitalLibraryStage({
   role,
   library,
   book,
+  books = [book],
   participants,
   onTurnPage,
   onToggleLock,
   onCitePage,
+  onSelectBook,
+  onAddBook,
+  onRemoveBook,
   onCloseStage,
 }: DigitalLibraryStageProps) {
   const isTeacher = role === 'teacher';
   const isLocked = library?.isLocked ?? true;
   const teacherPage = library?.currentPage ?? 0;
 
-  // Local student browsing page if unlocked, otherwise synced to teacher
+  const [viewMode, setViewMode] = useState<'reader' | 'shelf'>('reader');
   const [localPage, setLocalPage] = useState(teacherPage);
-  const [rtmLogs, setRtmLogs] = useState<RtmLogEntry[]>([
-    {
-      id: 'init',
-      label: 'channel joined',
-      payload: `library:${book.id} · ${participants.length} students · 1 agent`,
-      kind: 'sys',
-    },
-  ]);
-  const [seatPings, setSeatPings] = useState<Record<string, number>>({});
+  const [soundActive, setSoundActive] = useState(true);
+
+  useEffect(() => {
+    setSoundActive(isSoundEnabled());
+  }, []);
+
+  const handleToggleSound = () => {
+    const next = !soundActive;
+    setSoundActive(next);
+    setSoundEnabled(next);
+  };
 
   // Sync to teacher's page whenever locked or when teacher changes page
   useEffect(() => {
@@ -64,26 +70,14 @@ export function DigitalLibraryStage({
     }
   }, [teacherPage, isLocked, isTeacher]);
 
-  const addLog = useCallback((label: string, payload: string, kind?: 'athena' | 'sys' | 'teacher') => {
-    setRtmLogs((prev) => [
-      { id: `${Date.now()}-${Math.random()}`, label, payload, kind },
-      ...prev.slice(0, 5),
-    ]);
-  }, []);
-
   const handlePageChange = useCallback(
     (newPageIndex: number) => {
       setLocalPage(newPageIndex);
       if (isTeacher || !isLocked) {
-        addLog(
-          isTeacher ? 'teacher → channel' : 'student → channel',
-          JSON.stringify({ type: 'library:page', page: newPageIndex + 1 }),
-          isTeacher ? 'teacher' : undefined,
-        );
         void onTurnPage(newPageIndex);
       }
     },
-    [isTeacher, isLocked, onTurnPage, addLog],
+    [isTeacher, isLocked, onTurnPage],
   );
 
   const handleNext = () => {
@@ -98,252 +92,204 @@ export function DigitalLibraryStage({
     }
   };
 
+  // Athena tool call citation trigger with ~950ms staging
   const handleAthenaCite = async () => {
-    // Stage Athena citing page 6 (index 5)
-    addLog(
-      'athena → tool call',
-      `library.openPage(book:"${book.id}", page:6)`,
-      'athena',
-    );
-    await onCitePage(5, "That's the worked example on page 6.");
+    const targetIdx = Math.min(5, book.pages.length - 1);
+    handlePageChange(targetIdx);
+
+    // Staging lead time: 950ms for page turn animation and glow before speech
     setTimeout(() => {
-      addLog(
-        'athena → voice',
-        '"That\'s the worked example on page 6."',
-        'athena',
-      );
+      void onCitePage(targetIdx, `Page ${targetIdx + 1} worked example`);
     }, 950);
   };
 
-  const handleToggleLock = async () => {
-    const nextLocked = !isLocked;
-    addLog(
-      'teacher → channel',
-      JSON.stringify({ type: 'library:lock', locked: nextLocked }),
-      'teacher',
-    );
-    await onToggleLock(nextLocked);
+  const handleLockToggle = async () => {
+    if (!isTeacher) return;
+    const nextLock = !isLocked;
+    await onToggleLock(nextLock);
   };
 
-  // Ping seats when pages turn
-  useEffect(() => {
-    const pings: Record<string, number> = {};
-    participants.forEach((p, idx) => {
-      pings[p.participantId] = Date.now() + idx * 85;
-    });
-    setSeatPings(pings);
-  }, [teacherPage, participants]);
-
-  const spreadsCount = Math.ceil(book.pages.length / 2) + 1;
-  const currentSpreadIdx =
-    localPage === 0 ? 0 : Math.min(spreadsCount - 1, Math.floor((localPage + 1) / 2));
-  const progressPercent = Math.max(10, ((localPage + 1) / book.pages.length) * 100);
-
-  const isStudentDesynced = !isTeacher && !isLocked && localPage !== teacherPage;
+  const spreads = Math.ceil(book.pages.length / 2) + 1;
+  const currentSpreadIdx = localPage === 0 ? 0 : Math.min(spreads - 1, Math.floor((localPage + 1) / 2));
+  const isDesyncedFromTeacher = !isTeacher && !isLocked && localPage !== teacherPage;
 
   return (
-    <div className="eco-library-root flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[var(--eco-rule)] bg-[var(--eco-ink)] text-[var(--eco-cream)]">
-      {/* Top Chapter / Lesson Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--eco-rule)] bg-gradient-to-r from-[rgba(255,176,32,0.12)] via-[rgba(167,139,250,0.08)] to-transparent px-5 py-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-gradient-to-br from-[#FFD37A] to-[var(--eco-amber)] font-bold text-[#3A2500]">
-            ∑
+    <div className="digital-library-stage">
+      {/* Top Bar */}
+      <div className="stage-top-bar">
+        <div className="stage-left-info">
+          <div className="stage-brand-pill">
+            <span className="dot" />
+            <span className="brand-name">Athena Digital Library</span>
           </div>
-          <div>
-            <div className="font-semibold leading-tight text-[var(--eco-cream)]">{book.title}</div>
-            <div className="font-mono text-xs text-[var(--eco-cream-faint)]">{book.subtitle}</div>
+
+          <div className="book-breadcrumb">
+            <button
+              className="shelf-nav-btn"
+              onClick={() => setViewMode(viewMode === 'shelf' ? 'reader' : 'shelf')}
+            >
+              {viewMode === 'shelf' ? (
+                <>
+                  <ArrowLeft size={14} /> Back to Reader
+                </>
+              ) : (
+                <>
+                  <Library size={14} /> View Shelf
+                </>
+              )}
+            </button>
+            <span className="sep">/</span>
+            <span className="book-title-tag">{book.title}</span>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Progress bar */}
-          <div className="h-1.5 w-32 overflow-hidden rounded-full bg-white/10">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-[var(--eco-amber)] to-[#FF6B6B] transition-all duration-300"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
+        <div className="stage-right-actions">
+          {/* Audio toggle */}
+          <button
+            className="sound-toggle-btn"
+            title={soundActive ? 'Mute page flip sound' : 'Enable page flip sound'}
+            onClick={handleToggleSound}
+          >
+            {soundActive ? <Volume2 size={16} /> : <VolumeX size={16} />}
+          </button>
 
-          {onCloseStage && isTeacher && (
+          {/* Teacher Lock Toggle */}
+          {isTeacher ? (
             <button
-              type="button"
-              onClick={onCloseStage}
-              className="rounded-lg border border-[var(--eco-rule)] bg-[var(--eco-ink-sunken)] px-3 py-1 text-xs font-medium text-[var(--eco-cream-dim)] hover:bg-white/10"
+              className={`stage-lock-btn ${isLocked ? 'locked' : 'unlocked'}`}
+              onClick={handleLockToggle}
             >
-              Close stage
+              {isLocked ? <Lock size={14} /> : <Unlock size={14} />}
+              <span>{isLocked ? 'Locked to Teacher' : 'Student Free Read'}</span>
+            </button>
+          ) : (
+            <div className={`student-lock-indicator ${isLocked ? 'locked' : 'unlocked'}`}>
+              {isLocked ? <Lock size={12} /> : <Unlock size={12} />}
+              <span>{isLocked ? 'Teacher controlling page' : 'Free reading enabled'}</span>
+            </div>
+          )}
+
+          {/* Close stage button */}
+          {onCloseStage && (
+            <button className="stage-close-btn" onClick={onCloseStage} title="Close Library Stage">
+              <X size={18} />
             </button>
           )}
         </div>
       </div>
 
-      {/* Main Grid: Chapter Nav (Left), Flipbook Stage (Center), HUD Aside (Right) */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto p-4 md:grid-cols-[180px_minmax(0,1fr)_280px]">
-        {/* Left Chapter Navigator */}
-        <nav className="hidden rounded-xl border border-[var(--eco-rule)] bg-white/[0.02] p-3 md:block">
-          <h4 className="mb-2.5 font-mono text-[10px] font-bold uppercase tracking-wider text-[var(--eco-cream-faint)]">
-            Chapter
-          </h4>
-          <div className="flex flex-col gap-1.5">
-            {book.pages.map((p, idx) => {
-              if (p.isCover) return null;
-              const isCurrent = localPage > 0 && (idx === localPage || idx === localPage + 1);
-              return (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => handlePageChange(idx)}
-                  className={`chip ${isCurrent ? 'on' : ''}`}
-                  data-c={p.sectionColor || 'gold'}
-                >
-                  <span className="sw" />
-                  <span className="n truncate">{p.heading || p.sectionTitle}</span>
-                  <span className="p font-mono text-[10px]">{p.pageNumber}</span>
-                </button>
-              );
-            })}
-          </div>
-        </nav>
-
-        {/* Center: FlipBook Stage */}
-        <div className="stage relative flex flex-col justify-between rounded-2xl border border-[var(--eco-rule)] bg-gradient-to-b from-white/[0.04] to-transparent p-4">
-          <div className="flex min-h-[460px] flex-1 items-center justify-center overflow-hidden">
-            <FlipBook
-              book={book}
-              currentPage={localPage}
-              glowPage={library?.glowPage}
-              onPageFlip={handlePageChange}
-              canFlip={isTeacher || !isLocked}
-            />
-          </div>
-
-          {/* Desync Catch-up Banner */}
-          {isStudentDesynced && (
-            <div className="my-2 flex items-center justify-between rounded-xl border border-[var(--eco-amber)] bg-[rgba(255,176,32,0.15)] px-4 py-2 text-xs">
-              <span className="text-[var(--eco-amber)]">
-                You are on page {localPage + 1} (Teacher is on page {teacherPage + 1})
-              </span>
-              <button
-                type="button"
-                onClick={() => setLocalPage(teacherPage)}
-                className="rounded-md bg-[var(--eco-amber)] px-2.5 py-1 font-semibold text-[#3A2100] shadow-sm hover:brightness-110"
-              >
-                Jump to Teacher's Page
-              </button>
-            </div>
-          )}
-
-          {/* Spread Dots Indicator */}
-          <div className="dots mt-3 flex justify-center gap-1.5">
-            {Array.from({ length: spreadsCount }).map((_, i) => (
-              <div
-                key={i}
-                className={`dot ${i === currentSpreadIdx ? 'on' : ''}`}
-                onClick={() => handlePageChange(i === 0 ? 0 : i * 2 - 1)}
-              />
-            ))}
-          </div>
-
-          {/* Control Bar */}
-          <div className="bar mt-3 flex flex-wrap items-center justify-center gap-2">
-            <button
-              type="button"
-              onClick={handlePrev}
-              disabled={localPage === 0 || (!isTeacher && isLocked)}
-              className="rounded-full border border-[var(--eco-rule)] bg-white/5 px-4 py-1.5 text-xs font-medium text-[var(--eco-cream)] hover:bg-white/10 disabled:opacity-40"
-            >
-              ← Previous
-            </button>
-            <button
-              type="button"
-              onClick={handleNext}
-              disabled={localPage >= book.pages.length - 1 || (!isTeacher && isLocked)}
-              className="rounded-full border border-[var(--eco-rule)] bg-white/5 px-4 py-1.5 text-xs font-medium text-[var(--eco-cream)] hover:bg-white/10 disabled:opacity-40"
-            >
-              Next →
-            </button>
-
-            <button
-              type="button"
-              onClick={handleAthenaCite}
-              className="hero rounded-full bg-gradient-to-r from-[#FFD469] to-[var(--eco-amber)] px-5 py-1.5 text-xs font-bold text-[#3A2100] shadow-md transition hover:scale-105"
-            >
-              Athena cites page 6
-            </button>
-
-            {isTeacher && (
-              <button
-                type="button"
-                onClick={handleToggleLock}
-                className="ghost rounded-full border border-[var(--eco-glow)] bg-[var(--eco-glow-dim)] px-4 py-1.5 text-xs font-medium text-[var(--eco-glow-bright)] hover:bg-[var(--eco-glow)] hover:text-[var(--eco-ink)]"
-              >
-                {isLocked ? 'Unlock student paging' : 'Lock to teacher'}
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Right Aside HUD */}
-        <aside className="flex flex-col gap-3">
-          {/* Room Sync Card */}
-          <div className="card room rounded-xl border border-[rgba(45,212,191,0.25)] bg-gradient-to-b from-[rgba(45,212,191,0.12)] to-transparent p-3.5">
-            <h4 className="mb-2 font-mono text-[10px] font-bold uppercase tracking-wider text-[var(--eco-glow-bright)]">
-              In the room
-            </h4>
-            <div className="seats flex flex-col gap-2">
-              {participants.map((p, idx) => {
-                const isPing = seatPings[p.participantId] !== undefined;
-                const avColors = ['a', 'b', 'c'];
-                const avClass = avColors[idx % avColors.length];
+      {viewMode === 'shelf' ? (
+        <ShelfView
+          books={books}
+          activeBookId={book.id}
+          userRole={role}
+          onSelectBook={async (bookId) => {
+            if (onSelectBook) await onSelectBook(bookId);
+            setViewMode('reader');
+          }}
+          onAddBook={async (newBook) => {
+            if (onAddBook) await onAddBook(newBook);
+            if (onSelectBook) await onSelectBook(newBook.id);
+            setViewMode('reader');
+          }}
+          onRemoveBook={async (bookId) => {
+            if (onRemoveBook) await onRemoveBook(bookId);
+          }}
+        />
+      ) : (
+        <div className="stage-main-content">
+          {/* Left Column: Chapter Navigator & Contents */}
+          <aside className="stage-sidebar">
+            <div className="sidebar-section-title">CHAPTER CONTENTS</div>
+            <div className="chapter-chips-list">
+              {book.pages.map((p, idx) => {
+                if (p.isCover) return null;
+                const isCurrent = localPage > 0 && (idx === localPage || idx === localPage + 1);
                 return (
-                  <div
-                    key={p.participantId}
-                    className={`seat flex items-center gap-2.5 rounded-lg border border-transparent bg-white/5 p-2 text-xs transition duration-300 ${
-                      isPing ? 'border-[var(--eco-glow)] bg-[rgba(45,212,191,0.2)]' : ''
-                    }`}
+                  <button
+                    key={idx}
+                    className={`chapter-chip ${isCurrent ? 'on' : ''}`}
+                    data-c={p.sectionColor || 'gold'}
+                    onClick={() => handlePageChange(idx)}
                   >
-                    <span className={`av ${avClass} flex h-6 w-6 items-center justify-center rounded-full font-bold text-[#161022]`}>
-                      {p.displayName.charAt(0).toUpperCase()}
-                    </span>
-                    <span className="nm flex-1 text-[var(--eco-cream)]">{p.displayName}</span>
-                    <em className="font-mono text-[11px] text-[var(--eco-glow-bright)]">
-                      p. <b className="pg font-bold">{localPage + 1}</b>
-                    </em>
-                  </div>
+                    <span className="chip-swatch" />
+                    <span className="chip-title">{p.heading || p.sectionTitle || `Page ${idx + 1}`}</span>
+                    <span className="chip-pnum">{idx + 1}</span>
+                  </button>
                 );
               })}
             </div>
-            <div className="lockrow mt-3 flex items-center gap-2 font-mono text-[11px] text-[var(--eco-cream-faint)]">
-              {isLocked ? '🔒 Teacher controls the page' : '🔓 Students may read ahead'}
-            </div>
-          </div>
 
-          {/* RTM Log Card */}
-          <div className="card rtm rounded-xl border border-[rgba(167,139,250,0.25)] bg-gradient-to-b from-[rgba(167,139,250,0.12)] to-transparent p-3.5">
-            <h4 className="mb-2 font-mono text-[10px] font-bold uppercase tracking-wider text-[#CFC0FF]">
-              RTM channel
-            </h4>
-            <div className="log flex max-h-44 flex-col gap-2 overflow-hidden text-xs">
-              {rtmLogs.map((log) => (
-                <div
-                  key={log.id}
-                  className={`entry rounded border-l-2 bg-white/[0.02] p-1.5 pl-2.5 font-mono text-[11px] leading-tight text-[var(--eco-cream-dim)] ${
-                    log.kind === 'athena'
-                      ? 'border-l-[var(--eco-glow-bright)]'
-                      : log.kind === 'teacher'
-                      ? 'border-l-[var(--eco-amber)]'
-                      : 'border-l-[#38BDF8]'
-                  }`}
-                >
-                  <i className="block font-sans text-xs font-semibold text-[var(--eco-cream)]">
-                    {log.label}
-                  </i>
-                  <span>{log.payload}</span>
-                </div>
-              ))}
+            {/* Athena Citation Trigger Hero Card */}
+            <div className="athena-citation-card">
+              <div className="citation-header">
+                <Sparkles size={14} className="gold-sparkle" />
+                <span>Athena AI Co-Teacher</span>
+              </div>
+              <p className="citation-desc">
+                Cites textbook references directly into class audio with 950ms page-flip staging.
+              </p>
+              <button className="athena-cite-pill" onClick={handleAthenaCite}>
+                <Sparkles size={14} /> Cite Worked Example (Pg 6)
+              </button>
             </div>
-          </div>
-        </aside>
-      </div>
+          </aside>
+
+          {/* Center Stage: Interactive FlipBook */}
+          <main className="stage-center-book">
+            <div className="flipbook-outer-box">
+              <FlipBook
+                book={book}
+                currentPage={localPage}
+                glowPage={library?.glowPage}
+                onPageFlip={handlePageChange}
+                canFlip={isTeacher || !isLocked}
+              />
+            </div>
+
+            {/* Turn Controls & Spread Progress Dots */}
+            <div className="stage-turn-controls">
+              <button
+                className="nav-arrow-btn"
+                onClick={handlePrev}
+                disabled={localPage <= 0 || (!isTeacher && isLocked)}
+              >
+                <ChevronLeft size={18} /> Prev
+              </button>
+
+              <div className="spread-dots-box">
+                {Array.from({ length: spreads }).map((_, idx) => (
+                  <div
+                    key={idx}
+                    className={`spread-dot ${idx === currentSpreadIdx ? 'on' : ''}`}
+                  />
+                ))}
+              </div>
+
+              <button
+                className="nav-arrow-btn"
+                onClick={handleNext}
+                disabled={localPage >= book.pages.length - 1 || (!isTeacher && isLocked)}
+              >
+                Next <ChevronRight size={18} />
+              </button>
+            </div>
+
+            {/* Student Catchup Banner if desynced */}
+            {isDesyncedFromTeacher && (
+              <div className="desync-catchup-banner">
+                <span>Teacher is on page {teacherPage + 1}</span>
+                <button
+                  className="catchup-action-btn"
+                  onClick={() => handlePageChange(teacherPage)}
+                >
+                  Jump to Teacher (Page {teacherPage + 1})
+                </button>
+              </div>
+            )}
+          </main>
+        </div>
+      )}
     </div>
   );
 }

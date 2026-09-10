@@ -1,8 +1,8 @@
 /**
  * Digital Library Catalog and Search Service for Athena.
  *
- * Provides curated NCERT curriculum chapters with per-page text indexing
- * and search capabilities for Athena's tool calls and citation pipeline.
+ * Provides curated NCERT curriculum chapters and dynamic teacher-uploaded books
+ * with per-page text indexing and search capabilities for Athena's tool calls and citation pipeline.
  */
 
 import type {
@@ -10,13 +10,16 @@ import type {
   LibraryPage,
   LibraryPublicState,
   LibrarySearchResult,
+  Role,
 } from '@echosphere/shared-types';
 
 export const NCERT_CLASS7_CH2_BOOK: LibraryBook = {
   id: 'ncert-7-ch2',
   title: 'Adding unlike fractions',
   subtitle: 'NCERT · CLASS 7 · CHAPTER 2',
-  curriculum: 'NCERT Mathematics',
+  subject: 'NCERT Mathematics',
+  kind: 'curriculum',
+  addedBy: 'NCERT Curriculum',
   chapterNumber: 2,
   pages: [
     {
@@ -119,16 +122,134 @@ export const NCERT_CLASS7_CH2_BOOK: LibraryBook = {
   ],
 };
 
-const BOOKS: Map<string, LibraryBook> = new Map([
+export const NCERT_CLASS7_CH4_BOOK: LibraryBook = {
+  id: 'ncert-7-ch4',
+  title: 'Simple equations',
+  subtitle: 'NCERT · CLASS 7 · CHAPTER 4',
+  subject: 'NCERT Mathematics',
+  kind: 'curriculum',
+  addedBy: 'NCERT Curriculum',
+  chapterNumber: 4,
+  pages: [
+    {
+      pageNumber: 1,
+      isCover: true,
+      crest: 'x=',
+      title: 'Simple Equations',
+      subtitle: 'CLASS 7 · CHAPTER 4',
+      rawText: 'Mathematics Class 7 Chapter 4 Simple Equations. Setting up and solving linear equations.',
+    },
+    {
+      pageNumber: 2,
+      sectionColor: 'gold',
+      sectionId: '4.1',
+      sectionTitle: '4.1 Introduction',
+      heading: 'What is an equation?',
+      body: [
+        'An equation is a condition on a variable. It says that two expressions have equal value.',
+        'At least one of the two expressions must contain the variable.',
+      ],
+      rawText:
+        '4.1 Introduction What is an equation? An equation is a condition on a variable. It says that two expressions have equal value. At least one of the two expressions must contain the variable.',
+    },
+    {
+      pageNumber: 3,
+      sectionColor: 'teal',
+      sectionId: '4.2',
+      sectionTitle: '4.2 Solving equations',
+      heading: 'Balancing the scale',
+      body: [
+        'Whatever mathematical operation you perform on the Left Hand Side (LHS), you must also perform on the Right Hand Side (RHS).',
+      ],
+      work: '3x + 7 = 25\nSubtract 7 from both sides:\n3x = 18\nDivide both sides by 3:\nx = 6',
+      rawText:
+        '4.2 Solving equations Balancing the scale. 3x + 7 = 25. Subtract 7 from both sides: 3x = 18. Divide both sides by 3: x = 6.',
+    },
+    {
+      pageNumber: 4,
+      sectionColor: 'coral',
+      sectionId: '4.3',
+      sectionTitle: '4.3 Common error',
+      heading: 'Transposing with the wrong sign',
+      body: [
+        'When moving a term across the equal sign, its operation must invert (+ becomes -, * becomes /).',
+      ],
+      work: 'WRONG   x - 5 = 10 -> x = 10 - 5 = 5\nRIGHT   x - 5 = 10 -> x = 10 + 5 = 15',
+      rawText:
+        '4.3 Common error Transposing with wrong sign. When moving a term across the equal sign, its operation must invert. WRONG: x - 5 = 10 gives 5. RIGHT: x - 5 = 10 gives 15.',
+    },
+    {
+      pageNumber: 5,
+      isCover: true,
+      isEndCover: true,
+      crest: '✓',
+      title: 'End of chapter',
+      subtitle: 'ATHENA CAN CITE ANY PAGE',
+      rawText: 'End of chapter 4. Simple equations.',
+    },
+  ],
+};
+
+const GLOBAL_BOOKS: Map<string, LibraryBook> = new Map([
   [NCERT_CLASS7_CH2_BOOK.id, NCERT_CLASS7_CH2_BOOK],
+  [NCERT_CLASS7_CH4_BOOK.id, NCERT_CLASS7_CH4_BOOK],
 ]);
 
-export function getLibraryBook(bookId: string): LibraryBook | undefined {
-  return BOOKS.get(bookId);
+// Per-session custom books store
+const SESSION_BOOKS: Map<string, Map<string, LibraryBook>> = new Map();
+
+export function getSessionBooks(sessionId: string): LibraryBook[] {
+  const sessionMap = SESSION_BOOKS.get(sessionId);
+  const custom = sessionMap ? Array.from(sessionMap.values()) : [];
+  return [...Array.from(GLOBAL_BOOKS.values()), ...custom];
+}
+
+export function getLibraryBook(bookId: string, sessionId?: string): LibraryBook | undefined {
+  if (sessionId) {
+    const sessionMap = SESSION_BOOKS.get(sessionId);
+    if (sessionMap?.has(bookId)) {
+      return sessionMap.get(bookId);
+    }
+  }
+  return GLOBAL_BOOKS.get(bookId);
+}
+
+export function addBookToSession(
+  sessionId: string,
+  book: LibraryBook,
+  userRole: Role
+): { success: boolean; error?: string } {
+  if (userRole !== 'teacher') {
+    return { success: false, error: 'Forbidden: Only teachers can add books to the classroom shelf.' };
+  }
+  if (!SESSION_BOOKS.has(sessionId)) {
+    SESSION_BOOKS.set(sessionId, new Map());
+  }
+  SESSION_BOOKS.get(sessionId)!.set(book.id, book);
+  return { success: true };
+}
+
+export function removeBookFromSession(
+  sessionId: string,
+  bookId: string,
+  userRole: Role
+): { success: boolean; error?: string } {
+  if (userRole !== 'teacher') {
+    return { success: false, error: 'Forbidden: Only teachers can remove books from the classroom shelf.' };
+  }
+  if (GLOBAL_BOOKS.has(bookId)) {
+    return { success: false, error: 'Cannot remove core curriculum books.' };
+  }
+  const sessionMap = SESSION_BOOKS.get(sessionId);
+  if (!sessionMap || !sessionMap.has(bookId)) {
+    return { success: false, error: 'Book not found on classroom shelf.' };
+  }
+  sessionMap.delete(bookId);
+  return { success: true };
 }
 
 export function getAllBooks(): LibraryBook[] {
-  return Array.from(BOOKS.values());
+  return Array.from(GLOBAL_BOOKS.values());
 }
 
 export function createInitialLibraryState(bookId = NCERT_CLASS7_CH2_BOOK.id): LibraryPublicState {
@@ -147,67 +268,103 @@ export function createInitialLibraryState(bookId = NCERT_CLASS7_CH2_BOOK.id): Li
  * Searches across pages in a book for keywords or concept queries.
  * Returns the best matching page with confidence score and text snippet.
  */
-export function findPageInBook(bookId: string, query: string): LibrarySearchResult | null {
-  const book = BOOKS.get(bookId);
-  if (!book || !query || query.trim().length === 0) return null;
-
-  const terms = query
-    .toLowerCase()
-    .replace(/[^\w\s/]/g, ' ')
-    .split(/\s+/)
-    .filter((t) => t.length > 1);
-
-  if (terms.length === 0) return null;
-
-  interface MatchCandidate {
-    pageIndex: number;
-    score: number;
-    snippet: string;
-    sectionTitle?: string;
-  }
-
-  let bestMatch: MatchCandidate | null = null;
-
-  for (let idx = 0; idx < book.pages.length; idx++) {
-    const page = book.pages[idx]!;
-    let score = 0;
-    const lowerText = page.rawText.toLowerCase();
-    const lowerHeading = (page.heading ?? '').toLowerCase();
-    const lowerSec = (page.sectionTitle ?? '').toLowerCase();
-
-    for (const term of terms) {
-      if (lowerSec.includes(term)) score += 5;
-      if (lowerHeading.includes(term)) score += 4;
-      if (page.work && page.work.toLowerCase().includes(term)) score += 3;
-      if (lowerText.includes(term)) score += 1;
-    }
-
-    // Direct page number match: e.g. "page 6" or "p. 6" or "6"
-    if (terms.includes(String(page.pageNumber)) || query.includes(`page ${page.pageNumber}`)) {
-      score += 10;
-    }
-
-    if (!bestMatch || score > bestMatch.score) {
-      bestMatch = {
-        pageIndex: idx,
-        score,
-        snippet: page.heading || page.sectionTitle || page.rawText.slice(0, 100),
-        sectionTitle: page.sectionTitle,
-      };
-    }
-  }
-
-  const found = bestMatch as MatchCandidate | null;
-  if (!found || found.score < 2) {
+export function findPageInBook(bookId: string, query: string, sessionId?: string): LibrarySearchResult | null {
+  const book = getLibraryBook(bookId, sessionId);
+  if (!book || !book.pages || book.pages.length === 0) {
     return null;
   }
 
+  const cleanQuery = query.toLowerCase().trim();
+  const queryTerms = cleanQuery.split(/\s+/).filter((t) => t.length > 2);
+
+  let bestPage: LibraryPage | null = null;
+  let bestScore = 0;
+  let bestSnippet = '';
+
+  for (const page of book.pages) {
+    if (page.isCover) continue;
+
+    const pageText = (page.rawText || '').toLowerCase();
+    let score = 0;
+
+    // Exact query match bonus
+    if (cleanQuery.length > 3 && pageText.includes(cleanQuery)) {
+      score += 50;
+    }
+
+    // Direct page number match (e.g., "page 6", "p. 6", "pg 6", or standalone number)
+    const pageNumMatch = cleanQuery.match(/\b(?:page|pg|p\.?)?\s*(\d+)\b/i);
+    if (pageNumMatch && pageNumMatch[1]) {
+      const targetNum = parseInt(pageNumMatch[1], 10);
+      if (page.pageNumber === targetNum) {
+        score += 80;
+      }
+    }
+
+    // Section title / heading match
+    if (page.heading && cleanQuery.includes(page.heading.toLowerCase())) {
+      score += 40;
+    }
+    if (page.sectionTitle && cleanQuery.includes(page.sectionTitle.toLowerCase())) {
+      score += 30;
+    }
+
+    // Term frequency scoring
+    for (const term of queryTerms) {
+      if (pageText.includes(term)) {
+        score += 10;
+        // Count occurrences
+        const matches = (pageText.match(new RegExp(`\\b${term}\\b`, 'g')) || []).length;
+        score += matches * 5;
+      }
+    }
+
+    // Math/Worked example keyword cues
+    if (cleanQuery.includes('common error') || cleanQuery.includes('mistake') || cleanQuery.includes('wrong')) {
+      if (page.sectionColor === 'coral' || pageText.includes('mistake') || pageText.includes('wrong')) {
+        score += 35;
+      }
+    }
+    if (cleanQuery.includes('example') || cleanQuery.includes('worked') || cleanQuery.includes('step')) {
+      if (page.work || pageText.includes('example') || pageText.includes('step by step')) {
+        score += 30;
+      }
+    }
+    if (cleanQuery.includes('practice') || cleanQuery.includes('drill') || cleanQuery.includes('try')) {
+      if (page.drill || pageText.includes('practice') || pageText.includes('try these')) {
+        score += 30;
+      }
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestPage = page;
+
+      // Extract a descriptive snippet around matching terms
+      if (page.heading) {
+        bestSnippet = page.heading;
+        if (page.body && page.body[0]) {
+          bestSnippet += `: ${page.body[0]}`;
+        }
+      } else {
+        bestSnippet = page.rawText ? page.rawText.slice(0, 120) : 'Relevant page content';
+      }
+    }
+  }
+
+  if (!bestPage || bestScore === 0) {
+    return null;
+  }
+
+  // Find 0-indexed page in book pages array
+  const pageIndex = book.pages.indexOf(bestPage);
+  const confidence = Math.min(0.99, Number((bestScore / 100).toFixed(2)));
+
   return {
     bookId,
-    page: found.pageIndex, // 0-indexed for StPageFlip
-    snippet: found.snippet,
-    confidence: Math.min(1.0, found.score / 10),
-    sectionTitle: found.sectionTitle,
+    page: pageIndex,
+    snippet: bestSnippet,
+    confidence,
+    sectionTitle: bestPage.sectionTitle || bestPage.heading,
   };
 }
-

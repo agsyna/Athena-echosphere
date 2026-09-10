@@ -28,9 +28,12 @@ import type { MiroWorkspaceState, MiroStickyNote, MiroCommand } from './workspac
 import type { TargetedReadingItem, CatchupAvailabilitySlot, LanguageCode } from './support.js';
 import type {
   LibraryPublicState,
+  LibraryOpenPayload,
   LibraryPageTurnPayload,
   LibraryLockPayload,
   LibraryPresentPayload,
+  LibraryBookAddedPayload,
+  LibraryBookRemovedPayload,
 } from './library.js';
 
 /** Discriminator prefix so classroom events are never confused with Agora's own. */
@@ -95,9 +98,12 @@ export type ClassroomEvent =
   | { kind: 'echosphere:hand-lowered'; participantId: string }
   | { kind: 'echosphere:language-changed'; participantId: string; language: LanguageCode }
   | { kind: 'echosphere:library-state'; state: LibraryPublicState }
+  | { kind: 'echosphere:library-open'; payload: LibraryOpenPayload }
   | { kind: 'echosphere:library-page'; payload: LibraryPageTurnPayload }
   | { kind: 'echosphere:library-lock'; payload: LibraryLockPayload }
-  | { kind: 'echosphere:library-present'; payload: LibraryPresentPayload };
+  | { kind: 'echosphere:library-present'; payload: LibraryPresentPayload }
+  | { kind: 'echosphere:library-book-added'; payload: LibraryBookAddedPayload }
+  | { kind: 'echosphere:library-book-removed'; payload: LibraryBookRemovedPayload };
 
 export type ClassroomEventKind = ClassroomEvent['kind'];
 

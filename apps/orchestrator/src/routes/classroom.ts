@@ -67,6 +67,9 @@ import { translateText } from '../support/multilingual.js';
 import {
   getLibraryBook,
   getAllBooks,
+  getSessionBooks,
+  addBookToSession,
+  removeBookFromSession,
   findPageInBook,
 } from '../support/digitalLibrary.js';
 import { think } from '../agent/agentLifecycle.js';
@@ -1035,184 +1038,6 @@ export async function classroomRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ ok: true, language: session.language });
   });
 
-  // ─── Digital Library (Synced Textbook & Athena Citations) ─────────────────
-
-  app.get('/api/sessions/:sessionId/library', async (request, reply) => {
-    const session = requireSession(request, reply);
-    if (!session) return;
-    const currentBook = getLibraryBook(session.library.activeBookId);
-    return reply.send({
-      state: session.library,
-      books: getAllBooks(),
-      currentBook,
-    });
-  });
-
-  app.post('/api/sessions/:sessionId/library/page', async (request, reply) => {
-    const session = requireSession(request, reply);
-    if (!session) return;
-    const { participantId, page, bookId } = z
-      .object({
-        participantId: z.string(),
-        page: z.number().int().min(0),
-        bookId: z.string().optional(),
-      })
-      .parse(request.body);
-
-    const participant = session.participants.get(participantId);
-    if (!participant) return reply.code(404).send({ error: 'Participant not found' });
-
-    // Floor control: when locked, only the teacher can turn the shared page
-    if (session.library.isLocked && participant.role !== 'teacher') {
-      return reply.code(403).send({ error: 'Textbook is locked to teacher control' });
-    }
-
-    if (bookId && bookId !== session.library.activeBookId) {
-      session.library.activeBookId = bookId;
-    }
-
-    session.library.currentPage = page;
-    session.library.lastSequence += 1;
-    session.library.glowPage = null;
-
-    publish(session.sessionId, {
-      kind: 'echosphere:library-page',
-      payload: {
-        bookId: session.library.activeBookId,
-        page,
-        seq: session.library.lastSequence,
-        source: participant.role === 'teacher' ? 'teacher' : 'student',
-        glow: false,
-      },
-    });
-
-    return reply.send({ ok: true, state: session.library });
-  });
-
-  app.post('/api/sessions/:sessionId/library/lock', async (request, reply) => {
-    const session = requireSession(request, reply);
-    if (!session) return;
-    const { participantId, locked } = z
-      .object({
-        participantId: z.string(),
-        locked: z.boolean(),
-      })
-      .parse(request.body);
-
-    if (!isTeacher(session, participantId)) {
-      return reply.code(403).send({ error: 'Only the teacher can toggle textbook lock' });
-    }
-
-    session.library.isLocked = locked;
-    publish(session.sessionId, {
-      kind: 'echosphere:library-lock',
-      payload: { locked },
-    });
-
-    return reply.send({ ok: true, isLocked: session.library.isLocked });
-  });
-
-  app.post('/api/sessions/:sessionId/library/present', async (request, reply) => {
-    const session = requireSession(request, reply);
-    if (!session) return;
-    const { participantId, presenting } = z
-      .object({
-        participantId: z.string(),
-        presenting: z.boolean(),
-      })
-      .parse(request.body);
-
-    if (!isTeacher(session, participantId)) {
-      return reply.code(403).send({ error: 'Only the teacher can present the textbook' });
-    }
-
-    session.library.isPresenting = presenting;
-    session.library.presenterId = presenting ? participantId : null;
-
-    publish(session.sessionId, {
-      kind: 'echosphere:library-present',
-      payload: {
-        presenting,
-        presenterId: session.library.presenterId,
-      },
-    });
-
-    return reply.send({ ok: true, isPresenting: session.library.isPresenting });
-  });
-
-  app.post('/api/sessions/:sessionId/library/cite', async (request, reply) => {
-    const session = requireSession(request, reply);
-    if (!session) return;
-    const { participantId, page, bookId, citationText } = z
-      .object({
-        participantId: z.string(),
-        page: z.number().int().min(0),
-        bookId: z.string().optional(),
-        citationText: z.string().optional(),
-      })
-      .parse(request.body);
-
-    const targetBookId = bookId || session.library.activeBookId;
-    session.library.activeBookId = targetBookId;
-    session.library.currentPage = page;
-    session.library.lastSequence += 1;
-    session.library.glowPage = page;
-    session.library.isPresenting = true; // Auto-present textbook when cited
-
-    // 1. Stage the visual page turn and glow immediately
-    publish(session.sessionId, {
-      kind: 'echosphere:library-page',
-      payload: {
-        bookId: targetBookId,
-        page,
-        seq: session.library.lastSequence,
-        source: 'agent',
-        glow: true,
-      },
-    });
-
-    publish(session.sessionId, {
-      kind: 'echosphere:library-present',
-      payload: {
-        presenting: true,
-        presenterId: participantId,
-      },
-    });
-
-    // 2. Stage Athena's spoken citation ~950ms after the page turn begins
-    if (session.agentId) {
-      setTimeout(() => {
-        const spoken = citationText || `That's the worked example on page ${page + 1}.`;
-        void think(
-          session.sessionId,
-          `[classroom:system] Cite page ${page + 1}: ${spoken}`,
-        ).catch(() => undefined);
-      }, 950);
-    }
-
-    return reply.send({
-      ok: true,
-      page,
-      bookId: targetBookId,
-      stagedAudioDelayMs: 950,
-    });
-  });
-
-  app.get('/api/sessions/:sessionId/library/find', async (request, reply) => {
-    const session = requireSession(request, reply);
-    if (!session) return;
-    const { q, bookId } = z
-      .object({
-        q: z.string().min(1),
-        bookId: z.string().optional(),
-      })
-      .parse(request.query);
-
-    const targetBookId = bookId || session.library.activeBookId;
-    const match = findPageInBook(targetBookId, q);
-    return reply.send({ result: match });
-  });
-
 
   app.get('/api/sessions/:sessionId/report', async (request, reply) => {
     const session = requireSession(request, reply);
@@ -1245,6 +1070,251 @@ export async function classroomRoutes(app: FastifyInstance): Promise<void> {
 
     const report = await generateReport(session);
     return reply.send(report);
+  });
+
+  // ─── Digital Library Routes ────────────────────────────────────────────────
+
+  app.get('/api/sessions/:sessionId/library', async (request, reply) => {
+    const session = requireSession(request, reply);
+    if (!session) return;
+    const activeBookId = session.library?.activeBookId || 'ncert-7-ch2';
+    const book = getLibraryBook(activeBookId, session.sessionId);
+    const books = getSessionBooks(session.sessionId);
+    return reply.send({
+      library: session.library,
+      book,
+      books,
+    });
+  });
+
+  app.get('/api/sessions/:sessionId/library/books', async (request, reply) => {
+    const session = requireSession(request, reply);
+    if (!session) return;
+    const books = getSessionBooks(session.sessionId);
+    return reply.send({ books });
+  });
+
+  app.post('/api/sessions/:sessionId/library/books', async (request, reply) => {
+    const session = requireSession(request, reply);
+    if (!session) return;
+
+    const schema = z.object({
+      participantId: z.string(),
+      book: z.object({
+        id: z.string(),
+        title: z.string(),
+        subtitle: z.string().optional().default(''),
+        subject: z.string().optional().default('Class Notes'),
+        kind: z.enum(['curriculum', 'pdf', 'pptx', 'text']),
+        pages: z.array(z.any()),
+      }),
+    });
+
+    const parsed = schema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: parsed.error.message });
+    }
+
+    const { participantId, book } = parsed.data;
+    if (!isTeacher(session, participantId)) {
+      return reply.code(403).send({ error: 'Only teachers can add books to the classroom shelf.' });
+    }
+
+    const participant = session.participants.get(participantId);
+    const addedBy = participant?.displayName || 'Teacher';
+
+    const libraryBook = {
+      ...book,
+      subtitle: book.subtitle || 'Classroom Shelf',
+      addedBy,
+      createdAt: new Date().toISOString(),
+    };
+
+    const res = addBookToSession(session.sessionId, libraryBook, 'teacher');
+    if (!res.success) {
+      return reply.code(400).send({ error: res.error });
+    }
+
+    // Broadcast addition to all students via RTM
+    publish(session.sessionId, {
+      kind: 'echosphere:library-book-added',
+      payload: {
+        bookId: libraryBook.id,
+        book: libraryBook,
+        addedBy,
+      },
+    });
+
+    return reply.send({ ok: true, book: libraryBook });
+  });
+
+  app.delete('/api/sessions/:sessionId/library/books/:bookId', async (request, reply) => {
+    const session = requireSession(request, reply);
+    if (!session) return;
+
+    const { bookId } = request.params as { bookId: string };
+    const { participantId } = z.object({ participantId: z.string() }).parse(request.query);
+
+    if (!isTeacher(session, participantId)) {
+      return reply.code(403).send({ error: 'Only teachers can remove books from the classroom shelf.' });
+    }
+
+    const res = removeBookFromSession(session.sessionId, bookId, 'teacher');
+    if (!res.success) {
+      return reply.code(400).send({ error: res.error });
+    }
+
+    const participant = session.participants.get(participantId);
+    const removedBy = participant?.displayName || 'Teacher';
+
+    publish(session.sessionId, {
+      kind: 'echosphere:library-book-removed',
+      payload: {
+        bookId,
+        removedBy,
+      },
+    });
+
+    return reply.send({ ok: true });
+  });
+
+  app.post('/api/sessions/:sessionId/library/open', async (request, reply) => {
+    const session = requireSession(request, reply);
+    if (!session) return;
+
+    const schema = z.object({
+      bookId: z.string(),
+      participantId: z.string().optional(),
+    });
+    const { bookId, participantId } = schema.parse(request.body);
+
+    const isTeacherUser = participantId ? isTeacher(session, participantId) : true;
+    if (session.library) {
+      session.library.activeBookId = bookId;
+      session.library.currentPage = 0;
+      session.library.lastSequence++;
+    }
+
+    if (isTeacherUser) {
+      publish(session.sessionId, {
+        kind: 'echosphere:library-open',
+        payload: {
+          bookId,
+          source: 'teacher',
+        },
+      });
+      publish(session.sessionId, {
+        kind: 'echosphere:library-state',
+        state: session.library!,
+      });
+    }
+
+    return reply.send({ ok: true, state: session.library });
+  });
+
+  app.post('/api/sessions/:sessionId/library/turn', async (request, reply) => {
+    const session = requireSession(request, reply);
+    if (!session) return;
+
+    const schema = z.object({
+      page: z.number().int().min(0),
+      bookId: z.string().optional(),
+      participantId: z.string().optional(),
+      glow: z.boolean().optional(),
+    });
+    const { page, bookId, participantId, glow } = schema.parse(request.body);
+
+    const isTeacherUser = participantId ? isTeacher(session, participantId) : true;
+
+    if (session.library) {
+      if (bookId) session.library.activeBookId = bookId;
+      session.library.currentPage = page;
+      session.library.lastSequence++;
+      if (glow) {
+        session.library.glowPage = page;
+      }
+    }
+
+    const targetBookId = bookId || session.library?.activeBookId || 'ncert-7-ch2';
+    const seq = session.library?.lastSequence || Date.now();
+
+    publish(session.sessionId, {
+      kind: 'echosphere:library-page',
+      payload: {
+        bookId: targetBookId,
+        page,
+        seq,
+        source: isTeacherUser ? 'teacher' : 'student',
+        glow,
+      },
+    });
+
+    return reply.send({ ok: true, state: session.library });
+  });
+
+  app.post('/api/sessions/:sessionId/library/lock', async (request, reply) => {
+    const session = requireSession(request, reply);
+    if (!session) return;
+
+    const schema = z.object({
+      locked: z.boolean(),
+      participantId: z.string().optional(),
+    });
+    const { locked, participantId } = schema.parse(request.body);
+
+    if (participantId && !isTeacher(session, participantId)) {
+      return reply.code(403).send({ error: 'Only teachers can change library lock status' });
+    }
+
+    if (session.library) {
+      session.library.isLocked = locked;
+    }
+
+    publish(session.sessionId, {
+      kind: 'echosphere:library-lock',
+      payload: { locked },
+    });
+
+    return reply.send({ ok: true, isLocked: locked });
+  });
+
+  app.post('/api/sessions/:sessionId/library/present', async (request, reply) => {
+    const session = requireSession(request, reply);
+    if (!session) return;
+
+    const schema = z.object({
+      presenting: z.boolean(),
+      participantId: z.string().optional(),
+    });
+    const { presenting, participantId } = schema.parse(request.body);
+
+    if (session.library) {
+      session.library.isPresenting = presenting;
+      session.library.presenterId = presenting ? participantId || 'teacher' : null;
+    }
+
+    publish(session.sessionId, {
+      kind: 'echosphere:library-present',
+      payload: {
+        presenting,
+        presenterId: session.library?.presenterId || null,
+      },
+    });
+
+    return reply.send({ ok: true, isPresenting: presenting });
+  });
+
+  app.get('/api/sessions/:sessionId/library/search', async (request, reply) => {
+    const session = requireSession(request, reply);
+    if (!session) return;
+
+    const { q, bookId } = request.query as { q?: string; bookId?: string };
+    if (!q) {
+      return reply.code(400).send({ error: 'Missing search query q' });
+    }
+    const targetBookId = bookId || session.library?.activeBookId || 'ncert-7-ch2';
+    const result = findPageInBook(targetBookId, q, session.sessionId);
+    return reply.send({ result });
   });
 
   app.delete('/api/sessions/:sessionId', async (request, reply) => {

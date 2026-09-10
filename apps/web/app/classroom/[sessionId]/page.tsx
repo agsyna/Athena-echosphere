@@ -198,10 +198,14 @@ export default function ClassroomPage() {
           role="student"
           library={view.library}
           book={view.libraryBook}
+          books={view.libraryBooks}
           participants={view.participants}
           onTurnPage={view.turnLibraryPage}
           onToggleLock={view.toggleLibraryLock}
           onCitePage={view.citeLibraryPage}
+          onSelectBook={view.selectLibraryBook}
+          onAddBook={view.addLibraryBook}
+          onRemoveBook={view.removeLibraryBook}
         />
       ) : (
         <p className="p-4 text-sm text-[var(--eco-cream-dim)]">Loading textbook…</p>
@@ -479,10 +483,14 @@ export default function ClassroomPage() {
                   role="student"
                   library={view.library}
                   book={view.libraryBook}
+                  books={view.libraryBooks}
                   participants={view.participants}
                   onTurnPage={view.turnLibraryPage}
                   onToggleLock={view.toggleLibraryLock}
                   onCitePage={view.citeLibraryPage}
+                  onSelectBook={view.selectLibraryBook}
+                  onAddBook={view.addLibraryBook}
+                  onRemoveBook={view.removeLibraryBook}
                 />
               ) : (
                 <ParticipantGrid

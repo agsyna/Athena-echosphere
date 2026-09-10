@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import type { LibraryBook, LibraryPage } from '@echosphere/shared-types';
+import { playPageFlipSound, playCornerFoldSound } from './sound';
 
 export interface FlipBookProps {
   book: LibraryBook;
@@ -22,8 +23,9 @@ export function FlipBook({
   const shiftRef = useRef<HTMLDivElement | null>(null);
   const flipInstanceRef = useRef<any>(null);
   const isInternalTurn = useRef(false);
+  const [bookInstanceKey, setBookInstanceKey] = useState(0);
 
-  // Optical centering measurement: measures visible items and centers whatever is on screen
+  // Optical centering measurement: centers whatever page/spread is actually visible on screen
   const applyShift = useCallback(() => {
     if (!shiftRef.current || !hostRef.current) return;
     const items = [...hostRef.current.querySelectorAll<HTMLElement>('.stf__item')].filter((el) => {
@@ -56,7 +58,24 @@ export function FlipBook({
     shiftRef.current.style.transform = `translateX(${dx}px)`;
   }, []);
 
-  // Initialize PageFlip instance
+  // Multi-frame settling retry for optical centering
+  const scheduleCenteringRetries = useCallback(() => {
+    applyShift();
+    requestAnimationFrame(() => {
+      applyShift();
+      requestAnimationFrame(applyShift);
+    });
+    setTimeout(applyShift, 80);
+    setTimeout(applyShift, 220);
+    setTimeout(applyShift, 600);
+  }, [applyShift]);
+
+  // When book changes, update key to replace host <div> completely
+  useEffect(() => {
+    setBookInstanceKey((k) => k + 1);
+  }, [book.id]);
+
+  // Initialize PageFlip instance on the freshly mounted host
   useEffect(() => {
     if (!hostRef.current) return;
     let cancelled = false;
@@ -101,12 +120,16 @@ export function FlipBook({
           flip.on('changeState', (e: any) => {
             if (e.data === 'flipping' || e.data === 'user_fold') {
               if (shiftRef.current) shiftRef.current.style.transform = 'translateX(0px)';
+              if (e.data === 'user_fold') {
+                playCornerFoldSound();
+              }
             }
           });
 
           flip.on('changeOrientation', () => setTimeout(applyShift, 40));
 
           flip.on('flip', (e: any) => {
+            playPageFlipSound();
             setTimeout(applyShift, 20);
             if (!isInternalTurn.current && onPageFlip) {
               onPageFlip(e.data);
@@ -114,7 +137,7 @@ export function FlipBook({
             isInternalTurn.current = false;
           });
 
-          setTimeout(applyShift, 80);
+          scheduleCenteringRetries();
         }
       })
       .catch((err) => console.error('Failed to load PageFlip:', err));
@@ -134,9 +157,8 @@ export function FlipBook({
         }
       }
     };
-    // Rebuild only when book changes; page sync is handled separately below
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [book.id]);
+  }, [bookInstanceKey, book.id]);
 
   // Synchronize remote page changes
   useEffect(() => {
@@ -155,14 +177,15 @@ export function FlipBook({
           // Ignored
         }
       }
-      setTimeout(applyShift, 40);
+      playPageFlipSound();
+      scheduleCenteringRetries();
     }
-  }, [currentPage, applyShift]);
+  }, [currentPage, scheduleCenteringRetries]);
 
   return (
     <div className="bookwrap">
       <div id="bookshift" ref={shiftRef}>
-        <div id="book" ref={hostRef}>
+        <div id="book" key={`${book.id}-${bookInstanceKey}`} ref={hostRef}>
           {book.pages.map((p, idx) => {
             const isGlow = glowPage === idx;
             if (p.isCover) {
@@ -183,6 +206,23 @@ export function FlipBook({
               );
             }
 
+            // Image-based page (e.g. PDF canvas or PPTX slide)
+            if (p.imageSrc) {
+              return (
+                <div
+                  key={idx}
+                  className={`page page-image-mode ${isGlow ? 'glow' : ''}`}
+                  data-a={p.sectionColor || 'gold'}
+                  data-idx={idx}
+                >
+                  <div className="tab" />
+                  <img src={p.imageSrc} alt={`Page ${p.pageNumber}`} className="pdf-canvas-img" />
+                  <div className="pnum">{p.pageNumber}</div>
+                </div>
+              );
+            }
+
+            // Structured text / math / drill page
             return (
               <div
                 key={idx}
