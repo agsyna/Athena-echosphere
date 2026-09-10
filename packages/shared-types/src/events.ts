@@ -75,6 +75,8 @@ export type ClassroomEvent =
       displayName: string;
     }
   | { kind: 'echosphere:screen-share-stopped'; participantId: string }
+  | { kind: 'echosphere:model-started'; presenter: ActiveModel }
+  | { kind: 'echosphere:model-stopped'; participantId: string }
   | { kind: 'echosphere:session-ended'; sessionId: string }
   | { kind: 'echosphere:command'; command: TeacherCommand; issuedBy: string }
   | { kind: 'echosphere:restraint-meter-changed'; state: 'listening' | 'ready' | 'held-back' | 'speaking'; score?: number }
@@ -127,6 +129,13 @@ export type ClassroomEvent =
   | { kind: 'echosphere:hand-raised'; participantId: string; displayName: string; at: number }
   | { kind: 'echosphere:hand-lowered'; participantId: string }
   | { kind: 'echosphere:language-changed'; participantId: string; language: LanguageCode };
+
+/** Who is presenting a 3D model, if anyone — mirrors ActiveWhiteboard/activeScreenShare. */
+export interface ActiveModel {
+  participantId: string;
+  displayName: string;
+  modelId: string;
+}
 
 export type ClassroomEventKind = ClassroomEvent['kind'];
 
@@ -202,6 +211,7 @@ export interface RoomState {
   whiteboard?: WhiteboardPublicState;
   screenShareAllowed?: string[];
   activeScreenShare?: { participantId: string; displayName: string } | null;
+  activeModel?: ActiveModel | null;
   language?: LanguageCode;
 }
 

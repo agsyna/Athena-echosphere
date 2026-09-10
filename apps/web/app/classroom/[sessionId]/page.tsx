@@ -25,6 +25,7 @@ import {
 } from '@/components/classroom/panels';
 import { ParticipantGrid } from '@/components/classroom/ParticipantGrid';
 import { ScreenShareStage } from '@/components/classroom/ScreenShareStageLazy';
+import { Model3DStage } from '@/components/classroom/Model3DStage';
 import { ExcalidrawBoard } from '@/components/classroom/ExcalidrawBoardLazy';
 import { ClassroomDrawer, type DrawerTab } from '@/components/classroom/ClassroomDrawer';
 import { MiroWorkspacePane } from '@/components/workspace/MiroWorkspacePane';
@@ -471,8 +472,11 @@ export default function ClassroomPage() {
                       onSceneChange={() => undefined}
                     />
                   </div>
+                ) : view.activeModel ? (
+                  <Model3DStage modelId={view.activeModel} />
                 ) : (
                   <ParticipantGrid
+                    sessionId={sessionId}
                     participants={view.participants}
                     agentPresent={Boolean(view.room?.agentId)}
                     agentUid={identity.agentUid}
@@ -563,3 +567,4 @@ export default function ClassroomPage() {
     </main>
   );
 }
+

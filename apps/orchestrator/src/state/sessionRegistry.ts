@@ -278,6 +278,8 @@ export interface ClassroomSession {
   screenShareAllowed: Set<string>;
   /** Who is currently sharing, if anyone — only one screen at a time. */
   activeScreenShare: { participantId: string; displayName: string } | null;
+  /** Who is currently presenting a 3D model, if anyone — only one at a time. */
+  activeModel: { participantId: string; displayName: string; modelId: string } | null;
 
   /** Primary classroom language (e.g. 'en', 'fr', 'es', 'hi', 'de', 'ta', 'te'). */
   language: import('@echosphere/shared-types').LanguageCode;
@@ -347,6 +349,7 @@ export function createSession(
     raisedHands: new Set(),
     screenShareAllowed: new Set(),
     activeScreenShare: null,
+    activeModel: null,
     catchupByParticipant: new Map(),
   };
   sessions.set(sessionId, session);

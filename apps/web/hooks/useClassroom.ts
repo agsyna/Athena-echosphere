@@ -27,6 +27,7 @@ import type {
   CatchupAvailabilitySlot,
   LanguageCode,
   ActiveWhiteboard,
+  ActiveModel,
   BoardElement,
   BoardFile,
   WhiteboardJoin,
@@ -131,6 +132,9 @@ export interface ClassroomView {
   activeScreenShare: ActiveScreenShare | null;
   toggleScreenShare: (sharing: boolean) => Promise<void>;
   setScreenSharePermission: (targetParticipantId: string, allowed: boolean) => Promise<void>;
+  /** Non-null while someone is presenting a 3D model, mirroring activeWhiteboard. */
+  activeModel: ActiveModel | null;
+  presentModel: (modelId: string | null) => Promise<void>;
 }
 
 /** Keeps the rendered transcript bounded; the full log lives on the server. */
@@ -171,6 +175,7 @@ export function useClassroom(
   const [myLanguage, setMyLanguage] = useState<LanguageCode>('en');
   const [screenShareAllowed, setScreenShareAllowed] = useState<string[]>([]);
   const [activeScreenShare, setActiveScreenShare] = useState<ActiveScreenShare | null>(null);
+  const [activeModel, setActiveModel] = useState<ActiveModel | null>(null);
 
   const sourceRef = useRef<EventSource | null>(null);
 
@@ -201,6 +206,7 @@ export function useClassroom(
         // No cast needed: RoomState declares both fields.
         setScreenShareAllowed(event.state.screenShareAllowed ?? []);
         setActiveScreenShare(event.state.activeScreenShare ?? null);
+        setActiveModel(event.state.activeModel ?? null);
         break;
 
       case 'echosphere:participant-joined':
@@ -487,6 +493,16 @@ export function useClassroom(
           prev?.participantId === event.participantId ? null : prev,
         );
         break;
+
+      case 'echosphere:model-started':
+        setActiveModel(event.presenter);
+        break;
+
+      case 'echosphere:model-stopped':
+        setActiveModel((prev) =>
+          prev?.participantId === event.participantId ? null : prev,
+        );
+        break;
     }
   }, [participantId]);
 
@@ -654,6 +670,16 @@ export function useClassroom(
     [sessionId, participantId],
   );
 
+  const presentModel = useCallback(
+    async (modelId: string | null) => {
+      if (!participantId) return;
+      await orchestrator.presentModel(sessionId, participantId, modelId).catch((err) => {
+        console.error('Failed to present 3D model', err);
+      });
+    },
+    [sessionId, participantId],
+  );
+
   return {
     room,
     participants,
@@ -693,5 +719,7 @@ export function useClassroom(
     activeScreenShare,
     toggleScreenShare,
     setScreenSharePermission,
+    activeModel,
+    presentModel,
   };
 }
