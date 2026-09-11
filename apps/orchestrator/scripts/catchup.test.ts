@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { answerCatchup } from '../src/catchup/answer.ts';
+import { answerCatchup, sanitizeCatchupText } from '../src/catchup/answer.ts';
 import {
   addParticipant,
   AGENT_UID,
@@ -106,6 +106,36 @@ await t('a student recap reports the transcript, not the seeded lesson', async (
   );
 });
 
+await t('a student so-far recap is deterministic transcript text', async () => {
+  const session = createSession('Adding unlike fractions');
+  seedUnlikeFractionsLesson(session.lesson);
+  addParticipant(session, { displayName: 'Ms Rao', role: 'teacher' });
+  const student = addParticipant(session, { displayName: 'Ana', role: 'student' });
+  for (const text of [
+    'At the start we practiced adding unlike fractions with a common denominator.',
+    'Now we have changed topics to photosynthesis.',
+    'Photosynthesis is how plants use sunlight, carbon dioxide, and water to make glucose.',
+  ]) {
+    appendTranscript(session, {
+      participantId: null,
+      uid: AGENT_UID,
+      speaker: 'teacher',
+      text,
+      at: Date.now(),
+    });
+  }
+
+  const result = await answerCatchup(session, student.participantId, 'what have been taught in class so far?');
+  assert.match(result.reply, /unlike fractions|common denominator/i);
+  assert.match(result.reply, /photosynthesis|sunlight|glucose/i);
+  assert.ok(!result.reply.includes('| Topic |'), `returned markdown table: ${result.reply}`);
+  assert.ok(!result.reply.includes('**'), `returned markdown: ${result.reply}`);
+  assert.ok(
+    result.sources.every((s) => s.kind === 'transcript'),
+    `student recap used non-transcript sources: ${JSON.stringify(result.sources)}`,
+  );
+});
+
 await t('a student question off this subject is declined', async () => {
   const session = createSession('Adding unlike fractions');
   seedUnlikeFractionsLesson(session.lesson);
@@ -147,6 +177,28 @@ await t('a teacher keeps lesson documents in their grounding', async () => {
     result.sources.some((s) => s.kind === 'lesson'),
     `teacher lost lesson grounding: ${JSON.stringify(result.sources)}`,
   );
+});
+
+await t('catch-up replies are displayed as plain chat text', async () => {
+  const ugly = [
+    '### What Has Been Taught So Far',
+    '',
+    '| Topic | Key Idea |',
+    '| ----- | -------- |',
+    '| **Photosynthesis** | CO2 + H2O -> glucose + O2 |',
+    '',
+    '- A visual flow is still pending.<br>Ask for a diagram next.',
+    '',
+    'Formula: \\( CO_2 + H_2O \\rightarrow glucose + O_2 \\)',
+  ].join('\n');
+
+  const clean = sanitizeCatchupText(ugly);
+  assert.ok(!clean.includes('###'), clean);
+  assert.ok(!clean.includes('**'), clean);
+  assert.ok(!clean.includes('<br>'), clean);
+  assert.ok(!clean.includes('\\('), clean);
+  assert.ok(!clean.includes('| ----- |'), clean);
+  assert.match(clean, /Photosynthesis - CO2 \+ H2O -> glucose \+ O2/i);
 });
 
 // Route level, because the bug was in the route's role guard rather than in

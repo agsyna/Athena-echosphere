@@ -28,9 +28,11 @@
  * rotating students cannot use. Cross-talk is therefore a known, unmitigated
  * property of this deployment rather than a solved problem.
  *
- * The LLM is Agora's resold gpt-4o-mini. No OpenAI key is involved anywhere in
- * this project: speech recognition, the model and the voice are all billed
- * through the Agora project.
+ * The LLM is selected by LLM_VENDOR: either an OpenAI model Agora resells
+ * (no OpenAI key anywhere in this project; billed through the Agora project)
+ * or gpt-oss-120b on Groq with a dedicated key (GROQ_AGENT_API_KEY). The Groq
+ * path exists because the Anam avatar's lip-sync drifted against Agora on the
+ * resold path; see config.ts.
  */
 
 import {
@@ -38,6 +40,7 @@ import {
   AgoraClient,
   Area,
   ExpiresIn,
+  Groq,
   OpenAI,
   type AgentSession,
   SarvamSTT,
@@ -88,13 +91,25 @@ export function resellerModel(): ResellerModel {
  * be confused again.
  */
 export function modelResolution(): {
+  vendor: 'agora' | 'groq';
   configured: string;
-  resolved: ResellerModel;
+  resolved: string;
   supported: boolean;
 } {
+  if (config.llmVendor === 'groq') {
+    // Bring-your-own-key: whatever is configured is sent verbatim, so there is
+    // no fallback to diverge from. A wrong name fails loudly at Groq instead.
+    const model = config.groqAgentModel;
+    return { vendor: 'groq', configured: model, resolved: model, supported: true };
+  }
   const configured = config.llmModel;
   const resolved = resellerModel();
-  return { configured, resolved, supported: configured === resolved };
+  return { vendor: 'agora', configured, resolved, supported: configured === resolved };
+}
+
+/** The model name the in-call agent actually runs, for either vendor. */
+function agentModel(): string {
+  return modelResolution().resolved;
 }
 
 /**
@@ -120,7 +135,7 @@ export function modelResolution(): {
 const VISIBLE_REPLY_TOKENS = 700;
 
 function llmParams(): Record<string, unknown> {
-  const model = resellerModel();
+  const model = agentModel();
 
   // Two independent axes, deliberately not collapsed into one branch.
   //
@@ -135,9 +150,39 @@ function llmParams(): Record<string, unknown> {
   // Whether it is GPT-5 decides the NAME of the cap. GPT-5 renamed
   // `max_tokens` to `max_completion_tokens` and rejects `temperature`/`top_p`
   // outright — a hard 400 that fails the whole pipeline, not an ignored field.
+  // Groq's gpt-oss-120b takes the GPT-4 set (verified against the API: all
+  // three accepted, reasoning returned in a separate field, never in content).
   return model.startsWith('gpt-5')
     ? { max_completion_tokens: maxTokens }
     : { max_tokens: maxTokens, temperature: 0.4, top_p: 0.9 };
+}
+
+/**
+ * The LLM vendor object for the pipeline, per LLM_VENDOR.
+ *
+ * Both vendors are OpenAI-style on the wire, so the behavioural settings —
+ * greeting, failure line, history depth, sampling — are identical. The only
+ * difference is billing: the resold path sends no URL or key and the SDK
+ * attaches an Agora preset header; the Groq path sends the completions URL and
+ * the dedicated key, exactly as Agora's Groq integration page documents.
+ */
+function agentLlm(greeting: string): Groq | OpenAI {
+  const shared = {
+    greetingMessage: greeting,
+    failureMessage: 'One moment.',
+    maxHistory: 15,
+    params: llmParams(),
+  };
+  if (config.llmVendor === 'groq') {
+    return new Groq({
+      ...shared,
+      model: config.groqAgentModel,
+      apiKey: config.groqAgentApiKey,
+      url: 'https://api.groq.com/openai/v1/chat/completions',
+    });
+  }
+  // Managed mode types `model` as the reseller literal union, not `string`.
+  return new OpenAI({ ...shared, model: resellerModel() });
 }
 
 /**
@@ -347,15 +392,7 @@ export async function startAgent(session: ClassroomSession): Promise<string> {
       );
   }
 
-  agent = agent.withLlm(
-    new OpenAI({
-      model: resellerModel(),
-      greetingMessage: greeting,
-      failureMessage: 'One moment.',
-      maxHistory: 15,
-      params: llmParams(),
-    }),
-  );
+  agent = agent.withLlm(agentLlm(greeting));
 
   const agentSession = agent.createSession({
     channel: session.channel,
@@ -412,7 +449,7 @@ export async function pushInstructions(
         // more dangerous of the two: it fires whenever the roster or policy
         // changes, so a wrong parameter set here breaks a lesson that was
         // already running rather than one that never started.
-        params: { model: resellerModel(), ...llmParams() },
+        params: { model: agentModel(), ...llmParams() },
       },
     });
     return true;

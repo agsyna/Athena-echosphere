@@ -57,6 +57,7 @@ function AppMenuIcon() {
   );
 }
 
+
 export default function ClassroomPage() {
   const params = useParams<{ sessionId: string }>();
   const router = useRouter();
@@ -78,12 +79,28 @@ export default function ClassroomPage() {
   const [transcriptPinned, setTranscriptPinned] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+
     const stored = loadIdentity(sessionId);
     if (!stored) {
       router.replace('/join');
       return;
     }
-    setIdentity(stored);
+
+    void orchestrator
+      .resume(sessionId, stored.participantId)
+      .then(() => {
+        if (!cancelled) setIdentity(stored);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        clearIdentity();
+        router.replace('/join');
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [sessionId, router]);
 
   const view = useClassroom(sessionId, identity?.participantId ?? null);
@@ -556,4 +573,3 @@ export default function ClassroomPage() {
     </main>
   );
 }
-

@@ -58,6 +58,7 @@ app.get('/health', async () => {
   return {
     ok: true,
     sessions: listSessions().length,
+    llmVendor: model.vendor,
     modelConfigured: model.configured,
     modelResolved: model.resolved,
     modelSupported: model.supported,
@@ -105,7 +106,10 @@ if (!startupModel.supported) {
       `configured model. Supported: gpt-4o-mini, gpt-4.1-mini, gpt-5-nano, gpt-5-mini.`,
   );
 } else {
-  app.log.info({ model: startupModel.resolved }, 'LLM model resolved');
+  app.log.info(
+    { vendor: startupModel.vendor, model: startupModel.resolved },
+    'LLM model resolved',
+  );
 }
 
 await app.listen({ port: config.port, host: config.host });

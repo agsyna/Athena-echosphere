@@ -7,6 +7,16 @@
  * manage, rotate, or leak. `agora project env write` produces everything below.
  */
 
+export type LlmVendor = 'agora' | 'groq';
+
+function llmVendor(): LlmVendor {
+  const value = process.env.LLM_VENDOR ?? 'agora';
+  if (value === 'agora' || value === 'groq') return value;
+  throw new Error(
+    `LLM_VENDOR="${value}" is not supported. Use "agora" (resold OpenAI model) or "groq".`,
+  );
+}
+
 function required(name: string): string {
   const value = process.env[name];
   if (!value) {
@@ -26,11 +36,41 @@ export const config = {
   agoraAppCertificate: required('NEXT_AGORA_APP_CERTIFICATE'),
 
   /**
-   * Must be one of the models Agora resells under its own billing presets:
-   * gpt-4o-mini, gpt-4.1-mini, gpt-5-nano, gpt-5-mini. Anything else needs a
-   * bring-your-own-key path this project deliberately does not have.
+   * Which LLM drives the in-call agent.
+   *
+   *   'agora' (default) — an OpenAI model Agora resells under its own billing
+   *                       preset, named by LLM_MODEL. No vendor key involved.
+   *   'groq'            — bring-your-own Groq key, model named by
+   *                       GROQ_AGENT_MODEL. Adopted because the Anam avatar's
+   *                       lip-sync drifted against Agora on the resold GPT-5
+   *                       path, and Anam recommends gpt-oss-120b on Groq for
+   *                       Agora pipelines.
+   *
+   * Anything else is refused at boot rather than silently mapped to a default:
+   * a typo here would otherwise run a different model than the one the operator
+   * believes they configured, which is the exact failure `modelResolution()`
+   * exists to surface.
+   */
+  llmVendor: llmVendor(),
+
+  /**
+   * Agora-resold model, used when LLM_VENDOR is 'agora'. Must be one of the
+   * presets: gpt-4o-mini, gpt-4.1-mini, gpt-5-nano, gpt-5-mini. Anything else
+   * falls back to gpt-4o-mini (see resellerModel()).
    */
   llmModel: process.env.LLM_MODEL ?? 'gpt-4o-mini',
+
+  /**
+   * Groq credentials for the in-call agent, used when LLM_VENDOR is 'groq'.
+   *
+   * Deliberately a separate key from GROQ_API_KEY, which serves the
+   * orchestrator's own out-of-call calls (board, quizzes, catch-up). Groq rate
+   * limits are per key, and a live voice turn must not queue behind a board
+   * illustration. The key is required rather than borrowed from GROQ_API_KEY
+   * for the same reason.
+   */
+  groqAgentApiKey: process.env.LLM_VENDOR === 'groq' ? required('GROQ_AGENT_API_KEY') : '',
+  groqAgentModel: process.env.GROQ_AGENT_MODEL ?? 'openai/gpt-oss-120b',
 
   /**
    * Deepgram language for ASR.
@@ -148,7 +188,7 @@ export const config = {
   illustrationTimeoutMs: Number(process.env.ILLUSTRATION_TIMEOUT_MS ?? 20_000),
 
   /**
-   * Anam AI real-time avatar — a silent, muted video overlay for Athena.
+   * Anam AI avatar credentials for Athena's silent video overlay.
    *
    * Voice stays entirely on Agora ConvoAI (STT/LLM/TTS, as above); Anam only
    * renders a lip-flapping loop, nudged by `talk()` when Agora reports Athena

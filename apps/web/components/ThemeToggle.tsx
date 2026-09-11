@@ -3,9 +3,7 @@
  *
  * Light is the app's default ground (see globals.css) — this toggle opts a
  * browser into the dark variant by setting `data-eco-theme="dark"` on
- * `<html>`, and persists the choice so it survives a reload. The matching
- * inline script in layout.tsx applies the stored value before paint, so
- * there's no flash of the wrong theme.
+ * `<html>`, and persists the choice so it survives a reload.
  */
 
 'use client';
@@ -32,12 +30,17 @@ function applyTheme(theme: Theme): void {
 
 export function ThemeToggle() {
   // Starts undefined so the server-rendered and first client render match;
-  // the real value is read from the DOM attribute the anti-flash script
-  // already set, right after mount.
+  // the real value is read from localStorage and applied right after mount.
   const [theme, setTheme] = useState<Theme | null>(null);
 
   useEffect(() => {
-    const current = document.documentElement.dataset.ecoTheme === 'dark' ? 'dark' : 'light';
+    let current: Theme = 'light';
+    try {
+      current = localStorage.getItem(STORAGE_KEY) === 'dark' ? 'dark' : 'light';
+    } catch {
+      current = document.documentElement.dataset.ecoTheme === 'dark' ? 'dark' : 'light';
+    }
+    applyTheme(current);
     setTheme(current);
   }, []);
 

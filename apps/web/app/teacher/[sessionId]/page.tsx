@@ -139,12 +139,28 @@ export default function TeacherDashboardPage() {
   const [introPlayed, setIntroPlayed] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+
     const stored = loadIdentity(sessionId);
     if (!stored || stored.role !== 'teacher') {
       router.replace('/join');
       return;
     }
-    setIdentity(stored);
+
+    void orchestrator
+      .resume(sessionId, stored.participantId)
+      .then(() => {
+        if (!cancelled) setIdentity(stored);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        clearIdentity();
+        router.replace('/join');
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [sessionId, router]);
 
   const view = useClassroom(sessionId, identity?.participantId ?? null);

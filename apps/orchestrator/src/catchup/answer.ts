@@ -19,6 +19,8 @@ import { rollingTranscript } from '../state/sessionRegistry.js';
 
 const MAX_THREAD = 24;
 const MAX_SNIPPET = 280;
+const RECAP_TRANSCRIPT_WINDOW = 80;
+const RECAP_TRANSCRIPT_SOURCES = 24;
 
 function isEducationalQuery(question: string, sessionTitle: string): { isEdu: boolean; reason?: string } {
   const lower = question.toLowerCase();
@@ -65,13 +67,24 @@ export async function answerCatchup(
   const userTurn: CatchupMessage = { role: role === 'teacher' ? 'teacher' : 'student', text, at: now };
 
   if (!guardCheck.isEdu) {
-    const athenaTurn: CatchupMessage = { role: 'athena', text: guardCheck.reason!, at: Date.now() };
+    const athenaTurn: CatchupMessage = {
+      role: 'athena',
+      text: sanitizeCatchupText(guardCheck.reason!),
+      at: Date.now(),
+    };
     const history = [...thread, userTurn, athenaTurn].slice(-MAX_THREAD);
     session.catchupByParticipant.set(participantId, history);
-    return { reply: guardCheck.reason!, sources: [], history };
+    return { reply: athenaTurn.text, sources: [], history };
   }
 
   const sources = gatherSources(session, text, role === 'teacher' ? 'teacher' : 'student');
+  if (role !== 'teacher' && isStudentRecapQuery(text)) {
+    const reply = transcriptRecapReply(session);
+    const athenaTurn: CatchupMessage = { role: 'athena', text: reply, at: Date.now() };
+    const history = [...thread, userTurn, athenaTurn].slice(-MAX_THREAD);
+    session.catchupByParticipant.set(participantId, history);
+    return { reply, sources: recapTranscriptSources(session), history };
+  }
 
   const generated = await tryComplete(
     [
@@ -88,7 +101,7 @@ export async function answerCatchup(
     { temperature: 0.4, maxTokens: 1000 },
   );
 
-  const replyText = (generated ?? fallbackReply(text, sources, session.title)).trim();
+  const replyText = sanitizeCatchupText(generated ?? fallbackReply(text, sources, session.title));
   const athenaTurn: CatchupMessage = { role: 'athena', text: replyText, at: Date.now() };
   const history = [...thread, userTurn, athenaTurn].slice(-MAX_THREAD);
   session.catchupByParticipant.set(participantId, history);
@@ -100,7 +113,11 @@ export function catchupHistory(
   session: ClassroomSession,
   participantId: string,
 ): CatchupMessage[] {
-  return session.catchupByParticipant.get(participantId) ?? [];
+  return (session.catchupByParticipant.get(participantId) ?? []).map((message) =>
+    message.role === 'athena'
+      ? { ...message, text: sanitizeCatchupText(message.text) }
+      : message,
+  );
 }
 
 /**
@@ -117,6 +134,86 @@ const STUDENT_TAIL = 10;
 
 function speakerLabel(speaker: string): string {
   return speaker === 'agent' ? 'Athena' : speaker === 'teacher' ? 'Teacher' : 'Student';
+}
+
+function isStudentRecapQuery(question: string): boolean {
+  const lower = question.toLowerCase();
+  return (
+    /\b(what|wht)\b.*\b(taught|covered|happened|missed|said|discussed)\b/.test(lower) ||
+    /\b(taught|covered|happened|missed|recap|summary|catch up|so far)\b/.test(lower)
+  );
+}
+
+function recapTranscriptSources(session: ClassroomSession): CatchupSource[] {
+  return rollingTranscript(session, RECAP_TRANSCRIPT_WINDOW)
+    .slice(-RECAP_TRANSCRIPT_SOURCES)
+    .map((seg) => ({
+      kind: 'transcript' as const,
+      snippet: clip(`${speakerLabel(seg.speaker)}: ${seg.text}`),
+    }));
+}
+
+function transcriptRecapReply(session: ClassroomSession): string {
+  const sources = recapTranscriptSources(session);
+  if (sources.length === 0) {
+    return [
+      'I do not have any transcript from this class yet, so I cannot say that anything has been taught so far.',
+      'Once the teacher or Athena speaks and the transcript starts arriving, I can recap exactly what was covered.',
+    ].join('\n');
+  }
+
+  const lines = sources.map((source) => `- ${source.snippet}`);
+  return [
+    'Here is what the class transcript shows so far:',
+    ...lines,
+    'I am only using the live transcript here, not the lesson title or seeded lesson notes.',
+  ].join('\n');
+}
+
+function sanitizeMarkdownTables(text: string): string {
+  const lines = text.split(/\r?\n/);
+  const cleaned: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const cells = trimmed
+      .replace(/^\|/, '')
+      .replace(/\|$/, '')
+      .split('|')
+      .map((cell) => cell.trim())
+      .filter(Boolean);
+
+    if (cells.length >= 2 && cells.every((cell) => /^:?-{3,}:?$/.test(cell))) {
+      continue;
+    }
+
+    if (cells.length >= 2 && trimmed.includes('|')) {
+      cleaned.push(`- ${cells.join(' - ')}`);
+      continue;
+    }
+
+    cleaned.push(line);
+  }
+
+  return cleaned.join('\n');
+}
+
+export function sanitizeCatchupText(text: string): string {
+  return sanitizeMarkdownTables(text)
+    .trim()
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^\s*-{3,}\s*$/gm, '')
+    .replace(/\\\((.*?)\\\)/gs, '$1')
+    .replace(/\\\[(.*?)\\\]/gs, '$1')
+    .replace(/\$\$?([^$]+)\$\$?/g, '$1')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/__(.*?)__/g, '$1')
+    .replace(/(^|\s)[*_]([^*_]+)[*_](?=\s|$)/g, '$1$2')
+    .replace(/\\([()[\]{}])/g, '$1')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n');
 }
 
 /**
@@ -224,7 +321,13 @@ Your capabilities for the teacher:
 4. Ground responses in this session's ongoing records when relevant.
 
 Live class record:
-${sourceBlock}`;
+${sourceBlock}
+
+Formatting rules:
+- Reply in plain chat text only.
+- Do not use markdown tables, markdown headings, bold markers, italics markers, HTML, or LaTeX wrappers.
+- Prefer short sections with simple dash bullets.
+- Write formulas in plain text, such as CO2 + H2O -> glucose + O2.`;
   }
 
   const hasTranscript = sources.length > 0;
@@ -333,5 +436,3 @@ function clip(text: string): string {
   if (t.length <= MAX_SNIPPET) return t;
   return`${t.slice(0, MAX_SNIPPET - 1)}…`;
 }
-
-

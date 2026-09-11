@@ -107,7 +107,7 @@ const transcriptSchema = z.object({
   uid: z.string(),
   text: z.string(),
   isFinal: z.boolean().default(true),
-  turnId: z.number().optional(),
+  turnId: z.coerce.number().optional(),
   language: z.string().optional(),
   attributionConfidence: z.number().min(0).max(1).optional(),
 });
