@@ -193,7 +193,16 @@ export default function ClassroomPage() {
           onRemoveBook={view.removeLibraryBook}
         />
       ) : (
-        <p className="p-4 text-sm text-[var(--eco-cream-dim)]">Loading textbook…</p>
+        <div className="flex flex-col items-center justify-center p-8 gap-3 text-center">
+          <p className="text-sm text-[var(--eco-cream-dim)]">Loading textbook…</p>
+          <button
+            type="button"
+            onClick={() => void view.refreshLibrary()}
+            className="text-xs px-3 py-1.5 rounded-lg border border-[var(--eco-rule)] text-[var(--eco-cream-faint)] hover:text-[var(--eco-cream)] hover:border-[var(--eco-cream-dim)] transition"
+          >
+            Retry / Refresh Textbook
+          </button>
+        </div>
       ),
     },
     {

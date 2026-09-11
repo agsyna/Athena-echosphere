@@ -38,7 +38,7 @@ import { rankedGaps } from '../gaps/gapDetector.js';
 import { requireTeacher } from '../auth/supabaseAuth.js';
 import { generateReport } from '../report/summary.js';
 import { persistSessionEnd } from '../report/persist.js';
-import { closeRoom, publish, subscribe } from '../state/eventBus.js';
+import { closeRoom, publish, publishToTeachers, subscribe } from '../state/eventBus.js';
 import { answerCatchup, catchupHistory } from '../catchup/answer.js';
 import {
   broadcastWhiteboard,
@@ -542,6 +542,11 @@ export async function classroomRoutes(app: FastifyInstance): Promise<void> {
     const participant = session.participants.get(participantId);
     if (!participant) {
       return reply.code(403).send({ error: 'Unknown participant' });
+    }
+
+    if (participant.leftAt) {
+      delete participant.leftAt;
+      broadcastParticipantJoined(session, participant.participantId);
     }
 
     // Writing to `reply.raw` bypasses the Fastify reply object, and with it the
@@ -1249,7 +1254,13 @@ export async function classroomRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: res.error });
     }
 
-    // Broadcast addition to all students via RTM
+    if (session.library) {
+      session.library.activeBookId = libraryBook.id;
+      session.library.currentPage = 0;
+      session.library.lastSequence++;
+    }
+
+    // Broadcast addition to all students via SSE / RTM
     publish(session.sessionId, {
       kind: 'echosphere:library-book-added',
       payload: {
@@ -1259,7 +1270,22 @@ export async function classroomRoutes(app: FastifyInstance): Promise<void> {
       },
     });
 
-    return reply.send({ ok: true, book: libraryBook });
+    publish(session.sessionId, {
+      kind: 'echosphere:library-open',
+      payload: {
+        bookId: libraryBook.id,
+        source: 'teacher',
+      },
+    });
+
+    if (session.library) {
+      publish(session.sessionId, {
+        kind: 'echosphere:library-state',
+        state: session.library,
+      });
+    }
+
+    return reply.send({ ok: true, book: libraryBook, state: session.library });
   });
 
   app.delete('/api/sessions/:sessionId/library/books/:bookId', async (request, reply) => {
@@ -1339,29 +1365,61 @@ export async function classroomRoutes(app: FastifyInstance): Promise<void> {
     const { page, bookId, participantId, glow } = schema.parse(request.body);
 
     const isTeacherUser = participantId ? isTeacher(session, participantId) : true;
+    const targetBookId = bookId || session.library?.activeBookId || 'ncert-7-ch2';
 
-    if (session.library) {
-      if (bookId) session.library.activeBookId = bookId;
-      session.library.currentPage = page;
-      session.library.lastSequence++;
-      if (glow) {
-        session.library.glowPage = page;
-      }
+    // If locked to teacher, non-teachers CANNOT turn the classroom page
+    if (session.library?.isLocked && !isTeacherUser) {
+      return reply.code(403).send({ error: 'Textbook is locked to teacher' });
     }
 
-    const targetBookId = bookId || session.library?.activeBookId || 'ncert-7-ch2';
-    const seq = session.library?.lastSequence || Date.now();
+    if (isTeacherUser) {
+      // Teacher turns the whole class page
+      if (session.library) {
+        if (bookId) session.library.activeBookId = bookId;
+        session.library.currentPage = page;
+        session.library.lastSequence++;
+        if (glow) {
+          session.library.glowPage = page;
+        }
+      }
 
-    publish(session.sessionId, {
-      kind: 'echosphere:library-page',
-      payload: {
-        bookId: targetBookId,
+      const seq = session.library?.lastSequence || Date.now();
+
+      publish(session.sessionId, {
+        kind: 'echosphere:library-page',
+        payload: {
+          bookId: targetBookId,
+          page,
+          seq,
+          source: 'teacher',
+          glow,
+        },
+      });
+    } else {
+      // Student is in Free Read mode (isLocked is false):
+      // Record student's current reading page and notify the teacher
+      const participant = participantId ? session.participants.get(participantId) : undefined;
+      const displayName = participant?.displayName || 'Student';
+      const studentPos = {
+        participantId: participantId || 'unknown',
+        displayName,
         page,
-        seq,
-        source: isTeacherUser ? 'teacher' : 'student',
-        glow,
-      },
-    });
+        bookId: targetBookId,
+        updatedAt: Date.now(),
+      };
+
+      if (!session.library.studentPositions) {
+        session.library.studentPositions = {};
+      }
+      if (participantId) {
+        session.library.studentPositions[participantId] = studentPos;
+      }
+
+      publishToTeachers(session.sessionId, {
+        kind: 'echosphere:library-student-position',
+        position: studentPos,
+      });
+    }
 
     return reply.send({ ok: true, state: session.library });
   });
@@ -1382,6 +1440,7 @@ export async function classroomRoutes(app: FastifyInstance): Promise<void> {
 
     if (session.library) {
       session.library.isLocked = locked;
+      session.library.lastSequence++;
     }
 
     publish(session.sessionId, {
@@ -1389,7 +1448,20 @@ export async function classroomRoutes(app: FastifyInstance): Promise<void> {
       payload: { locked },
     });
 
-    return reply.send({ ok: true, isLocked: locked });
+    // If locked back to teacher, broadcast current teacher page to bring all students back
+    if (locked && session.library) {
+      publish(session.sessionId, {
+        kind: 'echosphere:library-page',
+        payload: {
+          bookId: session.library.activeBookId,
+          page: session.library.currentPage,
+          seq: session.library.lastSequence,
+          source: 'teacher',
+        },
+      });
+    }
+
+    return reply.send({ ok: true, isLocked: locked, state: session.library });
   });
 
   app.post('/api/sessions/:sessionId/library/present', async (request, reply) => {

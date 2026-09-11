@@ -357,6 +357,7 @@ export function createSession(
       presenterId: null,
       lastSequence: 0,
       glowPage: null,
+      studentPositions: {},
     },
     raisedHands: new Set(),
     screenShareAllowed: new Set(),

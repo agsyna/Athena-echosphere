@@ -25,6 +25,7 @@ import { modelResolution, stopAllAgents } from './agent/agentLifecycle.js';
 const TICK_INTERVAL_MS = 1000;
 
 const app = Fastify({
+  bodyLimit: 100 * 1024 * 1024, // 100MB to support PDF, PPTX, and rich courseware uploads
   logger: {
     level: process.env.LOG_LEVEL ?? 'info',
     transport:

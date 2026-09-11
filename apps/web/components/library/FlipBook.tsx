@@ -70,10 +70,10 @@ export function FlipBook({
     setTimeout(applyShift, 600);
   }, [applyShift]);
 
-  // When book changes, update key to replace host <div> completely
+  // When book or canFlip permission changes, update key to replace host <div> completely
   useEffect(() => {
     setBookInstanceKey((k) => k + 1);
-  }, [book.id]);
+  }, [book.id, canFlip]);
 
   // Initialize PageFlip instance on the freshly mounted host
   useEffect(() => {

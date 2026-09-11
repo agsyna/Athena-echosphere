@@ -227,6 +227,7 @@ export function useClassroom(
         }
         if (event.state.library) {
           setLibrary(event.state.library);
+          void refreshLibrary();
         }
         if (event.state.workspace) setWorkspace(event.state.workspace);
         if (event.state.targetedReadings) setTargetedReadings(event.state.targetedReadings);
@@ -539,6 +540,14 @@ export function useClassroom(
 
       case 'echosphere:library-state':
         setLibrary(event.state);
+        if (event.state?.activeBookId) {
+          setLibraryBooks((prev) => {
+            const found = prev.find((b) => b.id === event.state.activeBookId);
+            if (found) setLibraryBook(found);
+            return prev;
+          });
+          void refreshLibrary();
+        }
         break;
 
       case 'echosphere:library-open':
@@ -549,20 +558,37 @@ export function useClassroom(
                 activeBookId: event.payload.bookId,
                 currentPage: 0,
               }
-            : null,
+            : {
+                activeBookId: event.payload.bookId,
+                currentPage: 0,
+                isLocked: true,
+                isPresenting: false,
+                presenterId: null,
+                lastSequence: 0,
+                glowPage: null,
+              },
         );
+        setLibraryBooks((prev) => {
+          const found = prev.find((b) => b.id === event.payload.bookId);
+          if (found) setLibraryBook(found);
+          return prev;
+        });
         void refreshLibrary();
         break;
 
       case 'echosphere:library-book-added':
         setLibraryBooks((prev) => {
-          if (prev.some((b) => b.id === event.payload.bookId)) return prev;
-          return [...prev, event.payload.book];
+          const filtered = prev.filter((b) => b.id !== event.payload.bookId);
+          return [...filtered, event.payload.book];
         });
+        setLibraryBook((prev) => (!prev || prev.id === event.payload.bookId ? event.payload.book : prev));
+        void refreshLibrary();
         break;
 
       case 'echosphere:library-book-removed':
         setLibraryBooks((prev) => prev.filter((b) => b.id !== event.payload.bookId));
+        setLibraryBook((prev) => (prev?.id === event.payload.bookId ? null : prev));
+        void refreshLibrary();
         break;
 
       case 'echosphere:library-page':
@@ -600,6 +626,20 @@ export function useClassroom(
               }
             : null,
         );
+        break;
+
+      case 'echosphere:library-student-position':
+        setLibrary((prev) => {
+          if (!prev) return null;
+          const currentPositions = prev.studentPositions || {};
+          return {
+            ...prev,
+            studentPositions: {
+              ...currentPositions,
+              [event.position.participantId]: event.position,
+            },
+          };
+        });
         break;
     }
   }, [participantId, refreshLibrary]);
@@ -733,6 +773,17 @@ export function useClassroom(
     void refreshLibrary();
   }, [refreshLibrary]);
 
+  // Reactive synchronization: ensure libraryBook is always matched with library.activeBookId
+  useEffect(() => {
+    if (!library?.activeBookId) return;
+    const found = libraryBooks.find((b) => b.id === library.activeBookId);
+    if (found) {
+      setLibraryBook((current) => (current?.id === found.id ? current : found));
+    } else {
+      void refreshLibrary();
+    }
+  }, [library?.activeBookId, libraryBooks, refreshLibrary]);
+
   const selectLibraryBook = useCallback(
     async (bookId: string) => {
       setLibraryBooks((prev) => {
@@ -791,10 +842,11 @@ export function useClassroom(
 
   const turnLibraryPage = useCallback(
     async (page: number) => {
+      setLibrary((prev) => (prev ? { ...prev, currentPage: page } : null));
       if (!participantId) return;
       try {
         const res = await orchestrator.turnLibraryPage(sessionId, participantId, page, activeLibraryBookId);
-        setLibrary(res.state);
+        if (res?.state) setLibrary(res.state);
       } catch (err) {
         console.error('Turn library page failed', err);
       }
