@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { SpaceJoinBackground } from '@/components/SpaceJoinBackground';
 import { Bell, ExternalLink, Palette, X } from 'lucide-react';
 import type { Role } from '@echosphere/shared-types';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -113,11 +114,15 @@ export default function JoinPage() {
   const nameValid = displayName.trim().length > 0;
 
   return (
+  <SpaceJoinBackground>
     <div
-      className="flex h-screen flex-col overflow-hidden bg-cover bg-center bg-fixed bg-no-repeat"
+      className="flex h-screen flex-col overflow-hidden"
       style={{
-        backgroundImage: 'var(--eco-join-tint), url(/classroom-bg.png)',
-      }}
+        '--eco-athena': 'var(--eco-glow)',
+        '--eco-cream': '#ffffff',
+        '--eco-cream-dim': '#e5e7eb',
+        '--eco-cream-faint': '#cbd5e1',
+      } as React.CSSProperties}
     >
       {/* ── Top nav ─────────────────────────────────────────────────── */}
       <header className="mx-auto flex w-full max-w-6xl shrink-0 items-center justify-between px-6 py-4">
@@ -231,22 +236,7 @@ export default function JoinPage() {
       </header>
 
       {/* ── Body ────────────────────────────────────────────────────── */}
-      <main className="mx-auto flex w-full min-h-0 max-w-6xl flex-1 flex-col gap-4 px-6 pb-4">
-        <div className="eco-glass flex shrink-0 flex-col items-center gap-1.5 px-8 py-5 text-center animate-fade-up">
-          <span
-            className="eco-lamp eco-lamp-amber eco-pulse mb-1"
-            style={{ width: '0.625rem', height: '0.625rem' }}
-          />
-          <h1 className="eco-display text-2xl leading-tight text-[var(--eco-cream)] sm:text-3xl">
-            Welcome to the{' '}
-            <span style={{ color: 'var(--eco-athena)' }}>classroom</span>
-          </h1>
-          <p className="max-w-md text-sm text-[var(--eco-cream-dim)]">
-            Your AI co-teacher is tuned in and listening. Enter your name to
-            join a live lesson.
-          </p>
-        </div>
-
+      <main className="mx-auto flex w-full min-h-0 max-w-[95vw] flex-1 flex-col gap-4 px-6 py-4">
         {reachable === false && (
           <p
             className="eco-glass w-full shrink-0 px-4 py-3 text-sm animate-fade-up animate-fade-up-d1"
@@ -274,9 +264,12 @@ export default function JoinPage() {
         {/* Two cards side by side from `lg` up; stacked (and page-scrolling)
             below that. Each card owns its own internal scroll so the page
             itself never needs to. */}
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto lg:grid-cols-2 lg:overflow-visible">
+        <div className="mt-10 grid grid-cols-1 gap-4 overflow-y-auto lg:grid-cols-2 lg:gap-[30%] lg:overflow-visible">
           {/* Left: identity + role (+ create lesson for teachers) */}
-          <section className="eco-glass flex min-h-0 flex-col gap-5 overflow-y-auto p-6 animate-fade-up animate-fade-up-d1">
+          <section
+            className="eco-glass flex min-h-0 flex-col gap-5 overflow-y-auto p-6 animate-fade-up animate-fade-up-d1"
+            style={{ background: 'color-mix(in srgb, var(--eco-ink-raised) 45%, transparent)', backdropFilter: 'blur(20px)' }}
+          >
             <label className="flex flex-col gap-1.5">
               <span className="eco-label-dim">Your name</span>
               <input
@@ -364,7 +357,10 @@ export default function JoinPage() {
           </section>
 
           {/* Right: language (students) + 4-digit code entry + live sessions list */}
-          <section className="eco-glass flex min-h-0 flex-col gap-4 overflow-y-auto p-6 animate-fade-up animate-fade-up-d2">
+          <section
+            className="eco-glass flex min-h-0 flex-col gap-4 overflow-y-auto p-6 animate-fade-up animate-fade-up-d2"
+            style={{ background: 'color-mix(in srgb, var(--eco-ink-raised) 45%, transparent)', backdropFilter: 'blur(20px)' }}
+          >
             {role === 'student' && (
               <label className="flex flex-col gap-1.5 border-b pb-4" style={{ borderColor: 'var(--eco-rule)' }}>
                 <span className="eco-label-dim">
@@ -498,24 +494,7 @@ export default function JoinPage() {
           </section>
         </div>
       </main>
-
-            <footer className="shrink-0 px-6 pb-3">
-        <p
-          className="mx-auto w-full max-w-6xl rounded-lg px-4 py-2 text-center text-xs"
-          style={{
-            background: 'color-mix(in srgb, var(--eco-ink) 55%, transparent)',
-            backdropFilter: 'blur(4px)',
-            color: 'var(--eco-cream)',
-            textShadow: '0 1px 2px rgba(0,0,0,0.4)',
-          }}
-                >
-          <span className="inline-flex items-center gap-1.5">
-            Powered by
-            <img src="/agora-logo.png" alt="Agora" className="h-4 w-auto" />
-            · built with love ❤️
-          </span>
-        </p>
-      </footer>
     </div>
+  </SpaceJoinBackground>
   );
 }

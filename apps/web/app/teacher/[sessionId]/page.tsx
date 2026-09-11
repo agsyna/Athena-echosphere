@@ -14,8 +14,11 @@
  *     independent of the Menu drawer.
  *   - Absent Dispatcher and 1:1 Slots moved off the main header into the
  *     Controls tab of the Menu drawer.
- *   - Mute Athena / Send Athena out are now also available directly on the
- *     main screen header, not only inside the Controls tab.
+ *   - Muting/unmuting Athena lives as a single mic icon on her tile in
+ *     ParticipantGrid, not as separate header buttons.
+ *   - Share Screen / Whiteboard / 3D Models are icon-only buttons in the
+ *     header (tooltips still describe them via `title`).
+ *   - Room background is the same animated space scene as the join page.
  */
 
 'use client';
@@ -30,6 +33,7 @@ import type {
 } from '@echosphere/shared-types';
 import { ClassroomShell } from '@/components/classroom/ClassroomShell';
 import { ClassroomAudio } from '@/components/classroom/ClassroomAudioLazy';
+import { ClassroomSpaceBackground } from '@/components/ClassroomSpaceBackground';
 import { TeacherControlPanel } from '@/components/classroom/TeacherControlPanel';
 import {
   AgentAbsentNotice,
@@ -44,6 +48,7 @@ import {
 import { ParticipantGrid } from '@/components/classroom/ParticipantGridLazy';
 import { Model3DStage } from '@/components/classroom/Model3DStage';
 import { Model3DPicker } from '@/components/classroom/Model3DPicker';
+import { TeacherToolsBag } from '@/components/classroom/TeacherToolsBag';
 import { ScreenShareStage } from '@/components/classroom/ScreenShareStageLazy';
 import { ExcalidrawBoard } from '@/components/classroom/ExcalidrawBoardLazy';
 import { DigitalLibraryStage } from '@/components/library/DigitalLibraryStageLazy';
@@ -96,6 +101,32 @@ function LeaveIcon() {
   );
 }
 
+function ScreenShareIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="3" y="4" width="18" height="13" rx="2" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M8 21h8M12 17v4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path
+        d="M12 8v5m0-5-2.2 2.2M12 8l2.2 2.2"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function WhiteboardIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="3" y="4" width="18" height="12" rx="2" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M8 20h8M12 16v4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M7 12l3-3 2 2 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export default function TeacherDashboardPage() {
   const params = useParams<{ sessionId: string }>();
   const router = useRouter();
@@ -137,6 +168,15 @@ export default function TeacherDashboardPage() {
    * wrongly replay it; only startAgent() resets it to false.
    */
   const [introPlayed, setIntroPlayed] = useState(true);
+  /**
+   * Mirrors the server-side mute state locally, same pattern as micEnabled
+   * and isScreenSharing elsewhere in this file. Surfaced as a single icon
+   * on Athena's tile (ParticipantGrid) instead of separate Mute/Unmute
+   * header buttons.
+   */
+  const [agentMuted, setAgentMuted] = useState(false);
+  /** Which tool-bag panel (if any) is open: quiz and gaps no longer live in the Menu drawer. */
+  const [activeToolPanel, setActiveToolPanel] = useState<'quiz' | 'gaps' | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -198,6 +238,15 @@ export default function TeacherDashboardPage() {
     [identity, sessionId],
   );
 
+  const toggleAgentMute = useCallback(() => {
+    if (agentMuted) {
+      void send({ type: 'RESUME_AGENT' });
+    } else {
+      void send({ type: 'MUTE_AGENT' });
+    }
+    setAgentMuted((m) => !m);
+  }, [agentMuted, send]);
+
   const startAgent = useCallback(async () => {
     if (!identity) return;
     setBusy(true);
@@ -222,6 +271,15 @@ export default function TeacherDashboardPage() {
       setBusy(false);
     }
   }, [sessionId]);
+
+  /** Replaces the separate "Bring Athena in" / "Send Athena out" header buttons. */
+  const toggleAgentPresence = useCallback(() => {
+    if (view.room?.agentId) {
+      void stopAgent();
+    } else {
+      void startAgent();
+    }
+  }, [view.room?.agentId, startAgent, stopAgent]);
 
   const endSession = useCallback(async () => {
     if (!identity) return;
@@ -309,26 +367,6 @@ export default function TeacherDashboardPage() {
   const lang = view.myLanguage;
 
   const tabs: DrawerTab[] = [
-    {
-      id: 'absent',
-      label: 'Absent Dispatcher',
-      content: (
-        <div className="flex flex-col gap-3">
-          <p className="text-xs text-[var(--eco-cream-faint)]">
-            Dispatch lesson transcript, summary & diagnostic quiz to absent
-            students via WhatsApp/Email.
-          </p>
-          <button
-            type="button"
-            onClick={() => setShowAbsentPacket(true)}
-            className="self-start rounded-lg px-3 py-1.5 text-sm font-medium"
-            style={{ background: 'var(--eco-glow)', color: 'var(--eco-ink)' }}
-          >
-            Open Absent Dispatcher
-          </button>
-        </div>
-      ),
-    },
     {
       id: 'controls',
       label: t('tabControls', lang),
@@ -583,6 +621,7 @@ export default function TeacherDashboardPage() {
   ];
 
   return (
+    <ClassroomSpaceBackground>
     <main className="eco-room mx-auto flex min-h-screen max-w-6xl flex-col gap-3 p-4 md:h-screen md:overflow-hidden">
       {/* Pinned to the top-right corner of the viewport, per request. */}
       <div className="fixed right-4 top-4 z-30 flex items-center gap-2">
@@ -638,50 +677,6 @@ export default function TeacherDashboardPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {/* Moved here from the Controls tab, per request. */}
-          {!view.room?.agentId && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void startAgent()}
-              className="eco-action-chip disabled:cursor-not-allowed disabled:opacity-40"
-              style={{ '--chip-accent': 'var(--eco-glow)' } as CSSProperties}
-              title={t('bringAthenaIn', lang)}
-            >
-              {t('bringAthenaIn', lang)}
-            </button>
-          )}
-          <button
-            type="button"
-            disabled={busy || !view.room?.agentId}
-            onClick={() => void send({ type: 'MUTE_AGENT' })}
-            className="eco-action-chip disabled:cursor-not-allowed disabled:opacity-40"
-            style={{ '--chip-accent': 'var(--eco-amber)' } as CSSProperties}
-            title={t('muteAi', lang)}
-          >
-            {t('muteAi', lang)}
-          </button>
-          <button
-            type="button"
-            disabled={busy || !view.room?.agentId}
-            onClick={() => void send({ type: 'RESUME_AGENT' })}
-            className="eco-action-chip disabled:cursor-not-allowed disabled:opacity-40"
-            style={{ '--chip-accent': 'var(--eco-green)' } as CSSProperties}
-            title={t('unmuteAi', lang)}
-          >
-            {t('unmuteAi', lang)}
-          </button>
-          <button
-            type="button"
-            disabled={busy || !view.room?.agentId}
-            onClick={() => void stopAgent()}
-            className="eco-action-chip disabled:cursor-not-allowed disabled:opacity-40"
-            style={{ '--chip-accent': 'var(--eco-red)' } as CSSProperties}
-            title="Send Athena out of the room"
-          >
-            Send Athena out
-          </button>
-
           <button
             type="button"
             onClick={() => setTranscriptPinned((on) => !on)}
@@ -701,62 +696,32 @@ export default function TeacherDashboardPage() {
             type="button"
             onClick={() => void toggleScreenShare()}
             disabled={!isScreenSharing && someoneElseIsSharing}
-            className="eco-action-chip disabled:cursor-not-allowed disabled:opacity-40"
+            className="eco-action-chip flex h-9 w-9 items-center justify-center !px-0 disabled:cursor-not-allowed disabled:opacity-40"
             style={{ '--chip-accent': 'var(--eco-blue)' } as CSSProperties}
-            title="Share your screen"
+            aria-label={isScreenSharing ? t('stopScreenShare', lang) : t('screenShare', lang)}
+            title={isScreenSharing ? t('stopScreenShare', lang) : t('screenShare', lang)}
           >
-            {isScreenSharing ? t('stopScreenShare', lang) : t('screenShare', lang)}
+            <ScreenShareIcon />
           </button>
 
           <button
             type="button"
             onClick={() => void view.presentWhiteboard(!view.activeWhiteboard)}
             data-active={Boolean(view.activeWhiteboard)}
-            className="eco-action-chip"
+            className="eco-action-chip flex h-9 w-9 items-center justify-center !px-0"
             style={{ '--chip-accent': 'var(--eco-green)' } as CSSProperties}
+            aria-label={
+              view.activeWhiteboard
+                ? 'Stop showing the whiteboard to the room'
+                : 'Show the whiteboard to everyone'
+            }
             title={
               view.activeWhiteboard
                 ? 'Stop showing the whiteboard to the room'
                 : 'Show the whiteboard to everyone'
             }
           >
-            {view.activeWhiteboard ? 'Stop Whiteboard' : 'Whiteboard'}
-          </button>
-          
-          <button
-            type="button"
-            onClick={() => {
-              if (view.activeModel) {
-                void view.presentModel(null);
-              } else {
-                setModelPickerOpen(true);
-              }
-            }}
-            data-active={Boolean(view.activeModel)}
-            className="eco-action-chip"
-            style={{ '--chip-accent': 'var(--eco-blue)' } as CSSProperties}
-            title={
-              view.activeModel
-                ? 'Stop showing the 3D model to the room'
-                : 'Show a 3D model to everyone'
-            }
-          >
-            {view.activeModel ? 'Stop 3D Model' : '3D Models'}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => void view.presentLibrary(!view.library?.isPresenting)}
-            data-active={Boolean(view.library?.isPresenting)}
-            className="eco-action-chip"
-            style={{ '--chip-accent': 'var(--eco-amber)' } as CSSProperties}
-            title={
-              view.library?.isPresenting
-                ? 'Stop showing the textbook to the room'
-                : 'Show the textbook to everyone'
-            }
-          >
-            {view.library?.isPresenting ? 'Stop Textbook' : 'Textbook'}
+            <WhiteboardIcon />
           </button>
 
           <AnnotateToggle
@@ -981,6 +946,10 @@ export default function TeacherDashboardPage() {
                       selfUid={identity.uid}
                       selfMicEnabled={micEnabled}
                       raisedHands={view.raisedHands}
+                      agentMuted={agentMuted}
+                      onToggleAgentMute={toggleAgentMute}
+                      agentBusy={busy}
+                      onToggleAgentPresence={toggleAgentPresence}
                     />
                   )}
                 </div>
@@ -1024,7 +993,66 @@ export default function TeacherDashboardPage() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
       />
-      
+
+      <TeacherToolsBag
+        onOpenAbsentDispatcher={() => setShowAbsentPacket(true)}
+        onOpenModels={() => {
+          if (view.activeModel) {
+            void view.presentModel(null);
+          } else {
+            setModelPickerOpen(true);
+          }
+        }}
+        onOpenQuiz={() => setActiveToolPanel('quiz')}
+        onOpenGaps={() => setActiveToolPanel('gaps')}
+      />
+
+      {activeToolPanel && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center p-4"
+          style={{ background: 'color-mix(in srgb, var(--eco-ink) 65%, transparent)' }}
+          onClick={() => setActiveToolPanel(null)}
+        >
+          <div
+            className="eco-panel flex max-h-[85vh] w-full max-w-2xl flex-col gap-4 overflow-y-auto p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--eco-rule)' }}>
+              <h2 className="eco-label text-base">
+                {activeToolPanel === 'quiz' ? t('tabQuizzes', lang) : t('tabGaps', lang)}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setActiveToolPanel(null)}
+                className="text-sm text-[var(--eco-cream-faint)] hover:text-[var(--eco-cream)]"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            {activeToolPanel === 'quiz' ? (
+              <QuizCards quizzes={view.quizzes} canAnswer={false} onAnswer={() => undefined} language={lang} />
+            ) : (
+              <div className="flex flex-col gap-5">
+                <RestraintMeter state={view.restraintMeterState} score={view.restraintScore} />
+                <SuppressedInterventionsPanel interventions={view.suppressedInterventions} />
+                <GapPanel
+                  gaps={view.gaps}
+                  participants={view.participants}
+                  onQuiz={(topic, targetStudentIds) =>
+                    void send({ type: 'START_QUIZ', topic, targetStudentIds })
+                  }
+                  language={lang}
+                />
+                <BlockedAttempts attempts={view.blockedAttempts} language={lang} />
+                <IllustrationFailures failures={view.illustrationFailures} language={lang} />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <Model3DPicker
         isOpen={modelPickerOpen}
         onClose={() => setModelPickerOpen(false)}
@@ -1055,6 +1083,7 @@ export default function TeacherDashboardPage() {
         role="teacher"
       />
     </main>
+    </ClassroomSpaceBackground>
   );
 }
 

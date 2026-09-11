@@ -19,6 +19,64 @@ interface Tile {
   agentPresent?: boolean;
 }
 
+function MicOnIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M19 11a7 7 0 0 1-14 0M12 18v3"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function MicOffIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M12 15a3 3 0 0 0 3-3v-1M9 5.5A3 3 0 0 1 15 6v3.5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M19 11a7 7 0 0 1-9.8 6.4M5 11a7 7 0 0 0 2.2 5.1M12 18v3"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M3 3l18 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function PowerIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M12 3v8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path
+        d="M7 5.5a8 8 0 1 0 10 0"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function ParticipantGrid({
   sessionId,
   participants,
@@ -28,6 +86,10 @@ export function ParticipantGrid({
   selfUid,
   selfMicEnabled,
   raisedHands = [],
+  agentMuted = false,
+  onToggleAgentMute,
+  agentBusy = false,
+  onToggleAgentPresence,
 }: {
   /** Needed to mint Anam session tokens — see hooks/useAnamAvatar.ts. */
   sessionId: string;
@@ -39,6 +101,24 @@ export function ParticipantGrid({
   selfMicEnabled: boolean;
   /** participantIds with a raised hand, from useClassroom's `raisedHands`. */
   raisedHands?: string[];
+  /** Whether Athena is currently muted. Only meaningful when she's present. */
+  agentMuted?: boolean;
+  /**
+   * Toggle Athena's mute state. Only rendered (as an icon on her tile) when
+   * this is provided — student view omits it, since only the teacher can
+   * mute/unmute Athena.
+   */
+  onToggleAgentMute?: () => void;
+  /** Disables the presence toggle while a start/stop request is in flight. */
+  agentBusy?: boolean;
+  /**
+   * Toggle Athena's presence in the room (bring in / send out), replacing
+   * the separate "Bring Athena in" / "Send Athena out" header buttons.
+   * Rendered as a single icon on her tile — always visible when supplied,
+   * regardless of whether she's currently present, since this is what
+   * brings her in too. Student view never passes this.
+   */
+  onToggleAgentPresence?: () => void;
 }) {
   const teacher = participants.find((p) => p.role === 'teacher');
   const students = participants.filter((p) => p.role === 'student');
@@ -278,6 +358,50 @@ export function ParticipantGrid({
               >
                 {selfMicEnabled ? '●' : '○'}
               </span>
+            )}
+
+            {/* Bottom row on Athena's tile: presence toggle (bring in /
+                send out) always shown when a handler is supplied, plus the
+                mic mute toggle once she's actually present. Replaces the
+                old separate "Bring Athena in" / "Send Athena out" / "Mute
+                AI" / "Unmute AI" header buttons entirely. */}
+            {tile.isAgent && (onToggleAgentPresence || (tile.agentPresent && onToggleAgentMute)) && (
+              <div className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2">
+                {onToggleAgentPresence && (
+                  <button
+                    type="button"
+                    onClick={onToggleAgentPresence}
+                    disabled={agentBusy}
+                    className="flex h-8 w-8 items-center justify-center rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                    style={
+                      tile.agentPresent
+                        ? { borderColor: 'var(--eco-red)', background: 'var(--eco-red-dim)', color: 'var(--eco-red)' }
+                        : { borderColor: 'var(--eco-glow)', background: 'var(--eco-glow-dim)', color: 'var(--eco-glow-bright)' }
+                    }
+                    aria-label={tile.agentPresent ? 'Send Athena out' : 'Bring Athena in'}
+                    title={tile.agentPresent ? 'Send Athena out' : 'Bring Athena in'}
+                  >
+                    <PowerIcon />
+                  </button>
+                )}
+
+                {tile.agentPresent && onToggleAgentMute && (
+                  <button
+                    type="button"
+                    onClick={onToggleAgentMute}
+                    className="flex h-8 w-8 items-center justify-center rounded-full border transition-colors"
+                    style={
+                      agentMuted
+                        ? { borderColor: 'var(--eco-rule)', background: 'var(--eco-ink-sunken)', color: 'var(--eco-cream-faint)' }
+                        : { borderColor: 'var(--eco-glow)', background: 'var(--eco-glow-dim)', color: 'var(--eco-glow-bright)' }
+                    }
+                    aria-label={agentMuted ? 'Unmute Athena' : 'Mute Athena'}
+                    title={agentMuted ? 'Unmute Athena' : 'Mute Athena'}
+                  >
+                    {agentMuted ? <MicOffIcon /> : <MicOnIcon />}
+                  </button>
+                )}
+              </div>
             )}
           </div>
         );
