@@ -151,9 +151,10 @@ export default function ClassroomPage() {
   if (!identity) {
     return (
       <ClassroomSpaceBackground>
-      <main className="eco-room flex min-h-screen items-center justify-center p-6 text-sm text-[var(--eco-cream-dim)]">
-        Loading…
-      </main>
+        <main className="eco-room flex min-h-screen items-center justify-center p-6 text-sm text-[var(--eco-cream-dim)]">
+          Loading…
+        </main>
+      </ClassroomSpaceBackground>
     );
   }
 
