@@ -454,26 +454,6 @@ export async function classroomRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.post('/api/sessions/:sessionId/whiteboard/annotate', async (request, reply) => {
-    const session = requireSession(request, reply);
-    if (!session) return;
-    const { participantId, annotating } = z
-      .object({ participantId: z.string(), annotating: z.boolean() })
-      .parse(request.body);
-    if (!isTeacher(session, participantId)) {
-      return reply.code(403).send({ error: 'Only the teacher can start annotation' });
-    }
-    session.whiteboard.annotating = annotating;
-    if (annotating) {
-      await openWhiteboard(session);
-    }
-    broadcastWhiteboard(session);
-    return reply.send({
-      ok: true,
-      annotating,
-    });
-  });
-
   app.get('/api/sessions/:sessionId/whiteboard', async (request, reply) => {
     const session = requireSession(request, reply);
     if (!session) return;

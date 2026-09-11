@@ -113,7 +113,6 @@ export interface ClassroomView {
   whiteboard: WhiteboardPublicState | null;
   whiteboardJoin: WhiteboardJoin | null;
   whiteboardJoinError: string | null;
-  setAnnotating: (on: boolean) => Promise<void>;
   /** Non-null while someone is presenting the board, mirroring activeScreenShare. */
   activeWhiteboard: ActiveWhiteboard | null;
   boardScene: BoardElement[];
@@ -145,7 +144,6 @@ export interface ClassroomView {
   turnLibraryPage: (page: number) => Promise<void>;
   toggleLibraryLock: (locked: boolean) => Promise<void>;
   presentLibrary: (presenting: boolean) => Promise<void>;
-  citeLibraryPage: (page: number, citationText?: string) => Promise<void>;
   selectLibraryBook: (bookId: string) => Promise<void>;
   addLibraryBook: (book: LibraryBook) => Promise<void>;
   removeLibraryBook: (bookId: string) => Promise<void>;
@@ -700,14 +698,6 @@ export function useClassroom(
     [sessionId, participantId],
   );
 
-  const setAnnotating = useCallback(
-    async (on: boolean) => {
-      if (!participantId) return;
-      await orchestrator.setAnnotating(sessionId, participantId, on).catch(() => undefined);
-    },
-    [sessionId, participantId],
-  );
-
   // Fetch the participant-scoped local board state when the board opens.
   useEffect(() => {
     if (!participantId || !whiteboard?.open) {
@@ -880,24 +870,6 @@ export function useClassroom(
     [sessionId, participantId],
   );
 
-  const citeLibraryPage = useCallback(
-    async (page: number, citationText?: string) => {
-      if (!participantId) return;
-      try {
-        await orchestrator.turnLibraryPage(
-          sessionId,
-          participantId,
-          page,
-          activeLibraryBookId,
-          true, // glow
-        );
-      } catch (err) {
-        console.error('Cite library page failed', err);
-      }
-    },
-    [sessionId, participantId, activeLibraryBookId],
-  );
-
   /** Optimistic local echo so the tapped option shows immediately. */
   const recordAnswer = useCallback((quizId: string, answer: string) => {
     setQuizzes((prev) =>
@@ -967,7 +939,6 @@ export function useClassroom(
     whiteboard,
     whiteboardJoin,
     whiteboardJoinError,
-    setAnnotating,
     activeWhiteboard,
     boardScene,
     boardFiles,
@@ -994,7 +965,6 @@ export function useClassroom(
     turnLibraryPage,
     toggleLibraryLock,
     presentLibrary,
-    citeLibraryPage,
     selectLibraryBook,
     addLibraryBook,
     removeLibraryBook,

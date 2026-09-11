@@ -1,8 +1,9 @@
 /**
  * Teacher-only tool bag — a floating button that expands into icon
  * shortcuts for the handful of features that used to live as separate tabs
- * inside ClassroomDrawer (Absent Dispatcher, 3D Models, Quiz, Gaps). Only
- * ever rendered from the teacher page, so nothing here re-checks role.
+ * inside ClassroomDrawer (Absent Dispatcher, 3D Models, Digital Library,
+ * Quiz, Gaps). Only ever rendered from the teacher page, so nothing here
+ * re-checks role.
  *
  * Each icon glows on hover and shows its title in a small label that
  * fades/slides in next to it. The bag itself has a slow idle pulse so it
@@ -60,6 +61,15 @@ function GapsIcon() {
   );
 }
 
+function LibraryIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M4 4.5h6.5a2 2 0 0 1 2 2v13a1.5 1.5 0 0 0-1.5-1.5H4V4.5Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M20 4.5h-6.5a2 2 0 0 0-2 2v13a1.5 1.5 0 0 1 1.5-1.5H20V4.5Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 interface ToolItem {
   key: string;
   label: string;
@@ -73,17 +83,20 @@ export function TeacherToolsBag({
   onOpenModels,
   onOpenQuiz,
   onOpenGaps,
+  onOpenLibrary,
 }: {
   onOpenAbsentDispatcher: () => void;
   onOpenModels: () => void;
   onOpenQuiz: () => void;
   onOpenGaps: () => void;
+  onOpenLibrary: () => void;
 }) {
   const [open, setOpen] = useState(false);
 
   const items: ToolItem[] = [
     { key: 'absent', label: 'Absent Dispatcher', icon: <AbsentIcon />, onClick: onOpenAbsentDispatcher, accent: 'var(--eco-glow)' },
     { key: 'models', label: '3D Models', icon: <ModelsIcon />, onClick: onOpenModels, accent: 'var(--eco-blue)' },
+    { key: 'library', label: 'Digital Library', icon: <LibraryIcon />, onClick: onOpenLibrary, accent: 'var(--eco-amber)' },
     { key: 'quiz', label: 'Quiz', icon: <QuizIcon />, onClick: onOpenQuiz, accent: 'var(--eco-amber)' },
     { key: 'gaps', label: 'Gaps', icon: <GapsIcon />, onClick: onOpenGaps, accent: 'var(--eco-red)' },
   ];

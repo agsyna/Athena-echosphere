@@ -37,7 +37,7 @@ export function LanguageSelector({ currentLanguage, onLanguageChange }: Language
       {isOpen && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-          <div className="absolute right-0 z-50 mt-1 w-44 rounded-xl border border-[var(--eco-rule)] bg-[var(--eco-panel)] p-1.5 shadow-2xl backdrop-blur-md">
+          <div className="absolute right-0 z-50 mt-1 w-44 rounded-xl border border-[var(--eco-rule)] bg-[var(--eco-panel,var(--eco-ink-raised))] p-1.5 shadow-2xl backdrop-blur-md">
             <div className="px-2 py-1 text-[10px] font-semibold text-[var(--eco-cream-faint)] uppercase tracking-wider">
               Multilingual Agent
             </div>

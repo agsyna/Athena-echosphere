@@ -25,7 +25,7 @@ import {
 } from '@/components/classroom/panels';
 import { ParticipantGrid } from '@/components/classroom/ParticipantGridLazy';
 import { ScreenShareStage } from '@/components/classroom/ScreenShareStageLazy';
-import { Model3DStage } from '@/components/classroom/Model3DStage';
+import { Model3DStage } from '@/components/classroom/Model3DStageLazy';
 import { ExcalidrawBoard } from '@/components/classroom/ExcalidrawBoardLazy';
 import { DigitalLibraryStage } from '@/components/library/DigitalLibraryStageLazy';
 import { ClassroomDrawer, type DrawerTab } from '@/components/classroom/ClassroomDrawer';
@@ -206,7 +206,6 @@ export default function ClassroomPage() {
           participants={view.participants}
           onTurnPage={view.turnLibraryPage}
           onToggleLock={view.toggleLibraryLock}
-          onCitePage={view.citeLibraryPage}
           onSelectBook={view.selectLibraryBook}
           onAddBook={view.addLibraryBook}
           onRemoveBook={view.removeLibraryBook}
@@ -241,7 +240,24 @@ export default function ClassroomPage() {
   return (
     <ClassroomSpaceBackground>
       <main className="eco-room mx-auto flex min-h-screen max-w-6xl flex-col gap-3 p-4 md:h-screen md:overflow-hidden">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--eco-rule)] pb-4">
+      <header
+        className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--eco-rule)] pb-4"
+        /* Pinned readable regardless of theme: this header sits directly on
+           ClassroomSpaceBackground's always-dark starfield (it never follows
+           data-eco-theme), so the theme-adaptive --eco-cream tokens -- which
+           flip to near-black text in light mode -- go unreadable here. Same
+           fix already applied on the join page's header. Surface tokens
+           (ink-raised/-sunken) are pinned dark too, for FloorIndicator's
+           eco-panel-sunken chips, which otherwise pair the pinned light
+           text with a light fill. */
+        style={{
+          '--eco-cream': '#ffffff',
+          '--eco-cream-dim': '#e5e7eb',
+          '--eco-cream-faint': '#cbd5e1',
+          '--eco-ink-raised': '#151417',
+          '--eco-ink-sunken': '#101013',
+        } as CSSProperties}
+      >
         <div className="flex flex-col gap-1">
           <h1 className="eco-display text-2xl text-[var(--eco-cream)]">
             {view.room?.title ?? t('classroom', lang)}
@@ -491,8 +507,7 @@ export default function ClassroomPage() {
                     participants={view.participants}
                     onTurnPage={view.turnLibraryPage}
                     onToggleLock={view.toggleLibraryLock}
-                    onCitePage={view.citeLibraryPage}
-                    onSelectBook={view.selectLibraryBook}
+                              onSelectBook={view.selectLibraryBook}
                     onAddBook={view.addLibraryBook}
                     onRemoveBook={view.removeLibraryBook}
                   />

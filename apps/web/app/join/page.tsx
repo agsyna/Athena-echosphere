@@ -27,13 +27,13 @@ const doodleProducts = [
     name: "Traveller's Doodle Kit",
     price: '₹1,499',
     tag: 'On the go',
-    href: 'https://www.doodleproject.in/shop-1',
+    href: 'https://www.doodleproject.in/product-page/traveler-s-doodle-kit',
   },
   {
-    name: 'Mindfulness Doodle Coloring Book',
-    price: '₹499',
+    name: 'The Therapeutic Art Kit',
+    price: '₹1,999',
     tag: 'Relax pick',
-    href: 'https://www.doodleproject.in/shop-1',
+    href: 'https://www.doodleproject.in/product-page/the-therapeutic-art-kit?currency=INR',
   },
 ];
 
@@ -122,6 +122,15 @@ export default function JoinPage() {
         '--eco-cream': '#ffffff',
         '--eco-cream-dim': '#e5e7eb',
         '--eco-cream-faint': '#cbd5e1',
+        // Text was pinned for the always-dark starfield, but the surface
+        // tokens behind it were not: --eco-ink-raised/-sunken still flip
+        // light in light mode, so anything filled with them (the name
+        // input, the doodle popover, "Join by code") turned into pale text
+        // on a pale box. Pin these to their dark-theme values too, so every
+        // fill on this page stays a dark surface the pinned light text can
+        // actually sit on, matching the dark theme's own pairing.
+        '--eco-ink-raised': '#151417',
+        '--eco-ink-sunken': '#101013',
       } as React.CSSProperties}
     >
       {/* ── Top nav ─────────────────────────────────────────────────── */}
@@ -154,6 +163,15 @@ export default function JoinPage() {
             <aside
               className="eco-glass absolute right-0 top-12 z-20 flex w-[min(20rem,calc(100vw-3rem))] flex-col gap-3 p-4 text-left shadow-2xl"
               aria-label="Doodle and relax corner"
+              /* .eco-glass's own 88% background reads white in light mode --
+                 fine over a photo, but this panel floats over the always-dark
+                 starfield with text pinned white (see the wrapper above), so
+                 the default washes it out. Match the other glass cards on
+                 this page, which already override it for the same reason. */
+              style={{
+                background: 'color-mix(in srgb, var(--eco-ink-raised) 45%, transparent)',
+                backdropFilter: 'blur(20px)',
+              }}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2">
@@ -196,8 +214,10 @@ export default function JoinPage() {
                     className="group flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 transition-colors hover:bg-white/10"
                     style={{
                       borderColor: 'var(--eco-rule)',
-                      background:
-                        'color-mix(in srgb, var(--eco-ink-sunken) 84%, transparent)',
+                      // A light tint added on top of the panel's own background
+                      // rather than --eco-ink-sunken directly, which reads as a
+                      // near-white card in light mode against text pinned white.
+                      background: 'color-mix(in srgb, var(--eco-cream) 8%, transparent)',
                     }}
                   >
                     <span className="min-w-0">

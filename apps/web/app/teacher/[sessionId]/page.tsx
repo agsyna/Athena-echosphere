@@ -46,13 +46,12 @@ import {
   TranscriptFeed,
 } from '@/components/classroom/panels';
 import { ParticipantGrid } from '@/components/classroom/ParticipantGridLazy';
-import { Model3DStage } from '@/components/classroom/Model3DStage';
+import { Model3DStage } from '@/components/classroom/Model3DStageLazy';
 import { Model3DPicker } from '@/components/classroom/Model3DPicker';
 import { TeacherToolsBag } from '@/components/classroom/TeacherToolsBag';
 import { ScreenShareStage } from '@/components/classroom/ScreenShareStageLazy';
 import { ExcalidrawBoard } from '@/components/classroom/ExcalidrawBoardLazy';
 import { DigitalLibraryStage } from '@/components/library/DigitalLibraryStageLazy';
-import { AnnotateToggle } from '@/components/classroom/AnnotateToggle';
 import { ScreenShareControls } from '@/components/classroom/ScreenShareControls';
 import { ClassroomDrawer, type DrawerTab } from '@/components/classroom/ClassroomDrawer';
 import { useClassroom } from '@/hooks/useClassroom';
@@ -68,6 +67,7 @@ import { MiroWorkspacePane } from '@/components/workspace/MiroWorkspacePane';
 import { AbsentStudentPacketModal } from '@/components/support/AbsentStudentPacketModal';
 import { CatchupBookingModal } from '@/components/support/CatchupBookingModal';
 import { LanguageSelector } from '@/components/support/LanguageSelector';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { CatchupChatbot } from '@/components/classroom/CatchupChatbot';
 import { t } from '@/lib/i18n';
 
@@ -134,6 +134,7 @@ export default function TeacherDashboardPage() {
 
   const [showAbsentPacket, setShowAbsentPacket] = useState(false);
   const [showCatchupBooking, setShowCatchupBooking] = useState(false);
+  const [showLibraryStage, setShowLibraryStage] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
 
   const [identity, setIdentity] = useState<StoredIdentity | null>(null);
@@ -580,38 +581,6 @@ export default function TeacherDashboardPage() {
       ),
     },
     {
-      id: 'library',
-      label: 'Digital Library',
-      content: view.libraryBook ? (
-        <DigitalLibraryStage
-          sessionId={sessionId}
-          participantId={identity.participantId}
-          role="teacher"
-          library={view.library}
-          book={view.libraryBook}
-          books={view.libraryBooks}
-          participants={view.participants}
-          onTurnPage={view.turnLibraryPage}
-          onToggleLock={view.toggleLibraryLock}
-          onCitePage={view.citeLibraryPage}
-          onSelectBook={view.selectLibraryBook}
-          onAddBook={view.addLibraryBook}
-          onRemoveBook={view.removeLibraryBook}
-        />
-      ) : (
-        <div className="flex flex-col items-center justify-center p-8 gap-3 text-center">
-          <p className="text-sm text-[var(--eco-cream-dim)]">Loading textbook…</p>
-          <button
-            type="button"
-            onClick={() => void view.refreshLibrary()}
-            className="text-xs px-3 py-1.5 rounded-lg border border-[var(--eco-rule)] text-[var(--eco-cream-faint)] hover:text-[var(--eco-cream)] hover:border-[var(--eco-cream-dim)] transition"
-          >
-            Retry / Refresh Textbook
-          </button>
-        </div>
-      ),
-    },
-    {
       id: 'quizzes',
       label: t('tabQuizzes', lang),
       content: (
@@ -624,7 +593,23 @@ export default function TeacherDashboardPage() {
     <ClassroomSpaceBackground>
     <main className="eco-room mx-auto flex min-h-screen max-w-6xl flex-col gap-3 p-4 md:h-screen md:overflow-hidden">
       {/* Pinned to the top-right corner of the viewport, per request. */}
-      <div className="fixed right-4 top-4 z-30 flex items-center gap-2">
+      {/* Pinned readable regardless of theme, same as the header below --
+          see its comment. */}
+      <div
+        className="fixed right-4 top-4 z-30 flex items-center gap-2"
+        style={{
+          '--eco-cream': '#ffffff',
+          '--eco-cream-dim': '#e5e7eb',
+          '--eco-cream-faint': '#cbd5e1',
+          // Text was pinned for the always-dark starfield, but the surface
+          // tokens behind it (the leave button, LanguageSelector's button and
+          // dropdown) were not -- they still flip light in light mode, which
+          // turned white text on a now-pale fill. Pin them dark too.
+          '--eco-ink-raised': '#151417',
+          '--eco-ink-sunken': '#101013',
+        } as CSSProperties}
+      >
+        <ThemeToggle />
         <LanguageSelector
           currentLanguage={view.myLanguage}
           onLanguageChange={view.changeLanguage}
@@ -641,7 +626,24 @@ export default function TeacherDashboardPage() {
         </button>
       </div>
 
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--eco-rule)] pb-4">
+      <header
+        className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--eco-rule)] pb-4"
+        /* Pinned readable regardless of theme: this header sits directly on
+           ClassroomSpaceBackground's always-dark starfield (it never follows
+           data-eco-theme), so the theme-adaptive --eco-cream tokens -- which
+           flip to near-black text in light mode -- go unreadable here. Same
+           fix already applied on the join page's header. Surface tokens
+           (ink-raised/-sunken) are pinned dark too, for FloorIndicator's
+           eco-panel-sunken chips ("Open floor" / "Listening only"), which
+           otherwise pair the pinned light text with a light fill. */
+        style={{
+          '--eco-cream': '#ffffff',
+          '--eco-cream-dim': '#e5e7eb',
+          '--eco-cream-faint': '#cbd5e1',
+          '--eco-ink-raised': '#151417',
+          '--eco-ink-sunken': '#101013',
+        } as CSSProperties}
+      >
         <div className="flex flex-col gap-1">
           <h1 className="eco-display text-2xl text-[var(--eco-cream)]">
             {view.room?.title ?? t('teacherDashboard', lang)}
@@ -723,13 +725,6 @@ export default function TeacherDashboardPage() {
           >
             <WhiteboardIcon />
           </button>
-
-          <AnnotateToggle
-            board={view.whiteboard}
-            /* This tab can only write once it holds a live board connection. */
-            writerReady={Boolean(view.whiteboardJoin && !view.whiteboardJoinError)}
-            onToggle={(on) => void view.setAnnotating(on)}
-          />
 
           <FloorIndicator floor={view.floor} policy={view.policy} language={lang} />
           <button
@@ -930,8 +925,7 @@ export default function TeacherDashboardPage() {
                       participants={view.participants}
                       onTurnPage={view.turnLibraryPage}
                       onToggleLock={view.toggleLibraryLock}
-                      onCitePage={view.citeLibraryPage}
-                      onSelectBook={view.selectLibraryBook}
+                                  onSelectBook={view.selectLibraryBook}
                       onAddBook={view.addLibraryBook}
                       onRemoveBook={view.removeLibraryBook}
                       onCloseStage={() => void view.presentLibrary(false)}
@@ -1005,6 +999,7 @@ export default function TeacherDashboardPage() {
         }}
         onOpenQuiz={() => setActiveToolPanel('quiz')}
         onOpenGaps={() => setActiveToolPanel('gaps')}
+        onOpenLibrary={() => setShowLibraryStage(true)}
       />
 
       {activeToolPanel && (
@@ -1061,6 +1056,48 @@ export default function TeacherDashboardPage() {
           void view.presentModel(modelId);
         }}
       />
+      {showLibraryStage && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center p-4"
+          style={{ background: 'color-mix(in srgb, var(--eco-ink) 65%, transparent)' }}
+          onClick={() => setShowLibraryStage(false)}
+        >
+          <div
+            className="flex h-[85vh] w-full max-w-6xl flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {view.libraryBook ? (
+              <DigitalLibraryStage
+                sessionId={sessionId}
+                participantId={identity.participantId}
+                role="teacher"
+                library={view.library}
+                book={view.libraryBook}
+                books={view.libraryBooks}
+                participants={view.participants}
+                onTurnPage={view.turnLibraryPage}
+                onToggleLock={view.toggleLibraryLock}
+                onSelectBook={view.selectLibraryBook}
+                onAddBook={view.addLibraryBook}
+                onRemoveBook={view.removeLibraryBook}
+                onCloseStage={() => setShowLibraryStage(false)}
+              />
+            ) : (
+              <div className="eco-panel flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+                <p className="text-sm text-[var(--eco-cream-dim)]">Loading textbook…</p>
+                <button
+                  type="button"
+                  onClick={() => void view.refreshLibrary()}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-[var(--eco-rule)] text-[var(--eco-cream-faint)] hover:text-[var(--eco-cream)] hover:border-[var(--eco-cream-dim)] transition"
+                >
+                  Retry / Refresh Textbook
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <AbsentStudentPacketModal
         sessionId={sessionId}
         isOpen={showAbsentPacket}

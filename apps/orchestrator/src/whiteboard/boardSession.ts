@@ -13,7 +13,6 @@ export function publicWhiteboard(session: ClassroomSession): WhiteboardPublicSta
   const board = session.whiteboard;
   return {
     open: board.open,
-    annotating: board.annotating,
     presenting: board.presenting,
     scene: board.scene,
     files: board.files,

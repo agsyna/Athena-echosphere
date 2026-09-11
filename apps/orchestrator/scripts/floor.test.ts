@@ -917,14 +917,13 @@ await t('a question that will never be answered stops saying "waiting"', async (
 
 // ─── The board she said she had written on ──────────────────────────────────
 
-await t('a board write on a turn somebody asked for lands with annotate off', async () => {
+await t('a board write on a turn somebody asked for lands', async () => {
   // Live: "I've put the example on the board: 3/4 = 3 parts out of 4 equal
-  // parts" -- and the board was empty. The payload was dropped here because
-  // annotate mode was off, silently, while the spoken half of the same turn
-  // went out as normal.
+  // parts" -- and the board was empty. The payload used to be dropped here
+  // when the teacher's annotate toggle was off, silently, while the spoken
+  // half of the same turn went out as normal.
   const session = createSession('t');
   addParticipant(session, { displayName: 'Rao', role: 'teacher' });
-  assert.equal(session.whiteboard.annotating, false, 'annotate mode is off by default');
 
   grantSpeakPermit(session, 'DIRECTLY_ADDRESSED', 21);
   await handleAgentState(session, 'thinking');
@@ -936,22 +935,22 @@ await t('a board write on a turn somebody asked for lands with annotate off', as
   assert.equal(session.whiteboard.open, true, 'and the board is showing');
 });
 
-await t('a board write she volunteered is still gated on annotate mode', async () => {
-  // The case the gate was built for: she judges something board-worthy while
-  // the teacher is teaching, and writes onto a board nobody asked her to touch.
+await t('a board write she volunteered lands too', async () => {
+  // The case the old annotate gate held back: she judges something board-worthy
+  // during a silence interjection. Nothing gates it now -- how sparingly she
+  // writes is the prompt's job, and the interjection itself is already
+  // rate-limited by the gap cooldown.
   const session = createSession('t');
   addParticipant(session, { displayName: 'Rao', role: 'teacher' });
 
   session.lastAuthorisedTurnTrigger = 'GAP_DETECTED_IN_SILENCE';
   applyControl(session, { board: { action: 'write', text: 'A denominator is...' } });
-  assert.equal(session.whiteboard.cards.length, 0, 'unasked-for writing stays gated');
 
-  session.whiteboard.annotating = true;
-  applyControl(session, { board: { action: 'write', text: 'A denominator is...' } });
-  assert.equal(session.whiteboard.cards.length, 1, 'and lands once the teacher turns it on');
+  assert.equal(session.whiteboard.cards.length, 1, 'the line she volunteered is on the board');
+  assert.equal(session.whiteboard.cards[0]?.text, 'A denominator is...');
 });
 
-await t('board control is never gated, however the turn began', async () => {
+await t('board control lands however the turn began', async () => {
   const session = createSession('t');
   session.lastAuthorisedTurnTrigger = 'GAP_DETECTED_IN_SILENCE';
   applyControl(session, { board: { action: 'show' } });

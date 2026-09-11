@@ -22,7 +22,6 @@ export interface DigitalLibraryStageProps {
   participants: PublicParticipant[];
   onTurnPage: (page: number) => Promise<void>;
   onToggleLock: (locked: boolean) => Promise<void>;
-  onCitePage: (page: number, citationText?: string) => Promise<void>;
   onSelectBook?: (bookId: string) => Promise<void>;
   onAddBook?: (book: LibraryBook) => Promise<void>;
   onRemoveBook?: (bookId: string) => Promise<void>;
@@ -39,7 +38,6 @@ export function DigitalLibraryStage({
   participants,
   onTurnPage,
   onToggleLock,
-  onCitePage,
   onSelectBook,
   onAddBook,
   onRemoveBook,
@@ -95,17 +93,6 @@ export function DigitalLibraryStage({
     if (localPage > 0) {
       handlePageChange(localPage <= 2 ? 0 : localPage - 2);
     }
-  };
-
-  // Athena tool call citation trigger with ~950ms staging
-  const handleAthenaCite = async () => {
-    const targetIdx = Math.min(5, book.pages.length - 1);
-    handlePageChange(targetIdx);
-
-    // Staging lead time: 950ms for page turn animation and glow before speech
-    setTimeout(() => {
-      void onCitePage(targetIdx, `Page ${targetIdx + 1} worked example`);
-    }, 950);
   };
 
   const handleLockToggle = async () => {
@@ -224,20 +211,6 @@ export function DigitalLibraryStage({
                   </button>
                 );
               })}
-            </div>
-
-            {/* Athena Citation Trigger Hero Card */}
-            <div className="athena-citation-card">
-              <div className="citation-header">
-                <Sparkles size={14} className="gold-sparkle" />
-                <span>Athena AI Co-Teacher</span>
-              </div>
-              <p className="citation-desc">
-                Cites textbook references directly into class audio with 950ms page-flip staging.
-              </p>
-              <button className="athena-cite-pill" onClick={handleAthenaCite}>
-                <Sparkles size={14} /> Cite Worked Example (Pg 6)
-              </button>
             </div>
           </aside>
 

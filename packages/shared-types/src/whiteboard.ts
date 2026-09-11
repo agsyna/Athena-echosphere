@@ -54,8 +54,6 @@ export interface WhiteboardCommand {
 /** Public state for the shared local board. */
 export interface WhiteboardPublicState {
   open: boolean;
-  /** Teacher has asked Athena to annotate what she hears. */
-  annotating: boolean;
   /** Set while the board is being presented to the room, like a screen share. */
   presenting: ActiveWhiteboard | null;
   /** The shared drawing. Authoritative copy lives in the orchestrator. */

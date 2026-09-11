@@ -1203,47 +1203,27 @@ export function applyControl(
   }
 
   if (control.illustrate && !isDuplicateIllustration(session, control.illustrate.topic)) {
-    // Not gated on annotate mode, unlike `board.write` below. A written line is
-    // Athena putting words in the teacher's space; a diagram is what someone
-    // just asked her out loud to draw, and making that silently depend on a
-    // toggle nobody remembered to set is the more confusing failure.
+    // Never gated: a diagram is what someone just asked her out loud to draw,
+    // and making that silently depend on a toggle nobody remembered to set was
+    // the more confusing failure. `board` below makes the same call.
     void runIllustration(session, control.illustrate.topic).catch((err) => {
       console.error('[illustrate] failed:', err);
     });
   }
 
   if (control.board) {
-    // `show`, `hide` and `clear` are board control rather than content, so they
-    // are allowed through either way.
-    const isContent = control.board.action === 'write';
-
-    // Annotate mode gates the writes she VOLUNTEERS, which is the case it was
-    // built for: Athena judges something board-worthy while the teacher is
-    // teaching, and without the gate she would write onto a board nobody asked
-    // her to touch every time a definition came up.
-    //
-    // It must not gate a write on a turn somebody asked for. Gating those made
-    // her narrate a board she had not been allowed to write on — "I've put the
-    // example on the board: 3/4 = 3 parts out of 4 equal parts" with the board
-    // untouched — because the payload was dropped here, silently, while the
-    // spoken half of the same turn went out as normal. Nothing told the
-    // teacher, and nothing told her either, so she went on referring to it.
-    //
-    // `GAP_DETECTED_IN_SILENCE` is the only trigger that means nobody asked;
-    // an unauthorised turn has no trigger at all and is treated as asked-for,
-    // since the alternative is to drop it silently all over again. This is the
-    // same call the `illustrate` field above already makes, for the same
-    // reason.
-    const volunteered =
-      session.lastAuthorisedTurnTrigger === 'GAP_DETECTED_IN_SILENCE';
-
-    if (!isContent || !volunteered || session.whiteboard.annotating) {
-      applyBoardCommand(session, {
-        action: control.board.action,
-        text: control.board.text,
-        source: 'athena',
-      });
-    }
+    // Never gated. Writes used to require the teacher's annotate toggle when
+    // the turn was one Athena had started herself, which silently dropped the
+    // payload while the spoken half of the same turn went out as normal — she
+    // narrated a board she had not been allowed to write on. The toggle bought
+    // little: it only ever reached a write on a silence interjection, which is
+    // already rate-limited by the gap cooldown, and how sparingly she writes is
+    // the prompt's job. Same call the `illustrate` field above makes.
+    applyBoardCommand(session, {
+      action: control.board.action,
+      text: control.board.text,
+      source: 'athena',
+    });
   }
 
   if (control.library) {

@@ -260,13 +260,6 @@ export interface ClassroomSession {
      * map a late joiner is handed a picture frame with no picture in it.
      */
     files: WhiteboardPublicState['files'];
-    /**
-     * Athena only annotates while the teacher has this on. Without a gate she
-     * would write on every turn that happened to contain a definition, which
-     * floods a board nobody asked her to touch. Explicit teacher intent is the
-     * whole point of the feature.
-     */
-    annotating: boolean;
   };
 
   workspace?: import('@echosphere/shared-types').MiroWorkspaceState;
@@ -344,7 +337,6 @@ export function createSession(
     whiteboard: {
       open: false,
       cards: [],
-      annotating: false,
       presenting: null,
       scene: [],
       files: [],

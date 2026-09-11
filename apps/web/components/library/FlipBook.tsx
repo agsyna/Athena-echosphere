@@ -183,7 +183,13 @@ export function FlipBook({
   }, [currentPage, scheduleCenteringRetries]);
 
   return (
-    <div className="bookwrap">
+    // eco-library-root activates the book-page palette (--gold/--teal/--coral/
+    // --violet/--paper) scoped in globals.css. Without it those custom
+    // properties are unset here, so most rules below silently drop (no
+    // fallback) and one -- --paper on .page -- falls through to the global
+    // --paper token instead, which is a near-black *text* color in light
+    // mode: it was painting book pages almost unreadable.
+    <div className="bookwrap eco-library-root">
       <div id="bookshift" ref={shiftRef}>
         <div id="book" key={`${book.id}-${bookInstanceKey}`} ref={hostRef}>
           {book.pages.map((p, idx) => {

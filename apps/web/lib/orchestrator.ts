@@ -253,12 +253,6 @@ export const orchestrator = {
       },
     ),
 
-  setAnnotating: (sessionId: string, participantId: string, annotating: boolean) =>
-    request<{ ok: true; annotating: boolean }>(
-      `/api/sessions/${sessionId}/whiteboard/annotate`,
-      { method: 'POST', body: JSON.stringify({ participantId, annotating }) },
-    ),
-
   // ─── 3D Model Presentation ──────────────────────────────────────────────
 
   /**
