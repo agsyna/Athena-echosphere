@@ -37,6 +37,14 @@ export interface LibraryBook {
   pages: LibraryPage[];
 }
 
+export interface StudentReadingPosition {
+  participantId: string;
+  displayName: string;
+  page: number; // 0-indexed spread / page in flipbook
+  bookId: string;
+  updatedAt: number;
+}
+
 export interface LibraryPublicState {
   activeBookId: string;
   currentPage: number; // 0-indexed spread / page index
@@ -45,6 +53,7 @@ export interface LibraryPublicState {
   presenterId: string | null;
   lastSequence: number;
   glowPage?: number | null;
+  studentPositions?: Record<string, StudentReadingPosition>;
 }
 
 export interface LibraryOpenPayload {

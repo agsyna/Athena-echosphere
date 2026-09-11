@@ -63,30 +63,35 @@ export function DigitalLibraryStage({
     setSoundEnabled(next);
   };
 
-  // Sync to teacher's page whenever locked or when teacher changes page
+  // Sync to teacher's page whenever locked or when teacher changes page, or when book/page count changes
   useEffect(() => {
+    const maxPage = Math.max(0, (book?.pages?.length ?? 1) - 1);
+    const targetPage = Math.min(teacherPage, maxPage);
     if (isLocked || isTeacher) {
-      setLocalPage(teacherPage);
+      setLocalPage((prev) => (prev === targetPage ? prev : targetPage));
+    } else {
+      setLocalPage((prev) => (prev > maxPage ? maxPage : prev));
     }
-  }, [teacherPage, isLocked, isTeacher]);
+  }, [teacherPage, isLocked, isTeacher, book?.id, book?.pages?.length]);
 
   const handlePageChange = useCallback(
     (newPageIndex: number) => {
+      if (!isTeacher && isLocked) return;
       setLocalPage(newPageIndex);
-      if (isTeacher || !isLocked) {
-        void onTurnPage(newPageIndex);
-      }
+      void onTurnPage(newPageIndex);
     },
     [isTeacher, isLocked, onTurnPage],
   );
 
   const handleNext = () => {
+    if (!isTeacher && isLocked) return;
     if (localPage < book.pages.length - 1) {
       handlePageChange(localPage + (localPage === 0 ? 1 : 2));
     }
   };
 
   const handlePrev = () => {
+    if (!isTeacher && isLocked) return;
     if (localPage > 0) {
       handlePageChange(localPage <= 2 ? 0 : localPage - 2);
     }
@@ -112,6 +117,7 @@ export function DigitalLibraryStage({
   const spreads = Math.ceil(book.pages.length / 2) + 1;
   const currentSpreadIdx = localPage === 0 ? 0 : Math.min(spreads - 1, Math.floor((localPage + 1) / 2));
   const isDesyncedFromTeacher = !isTeacher && !isLocked && localPage !== teacherPage;
+  const studentPositions = library?.studentPositions ? Object.values(library.studentPositions) : [];
 
   return (
     <div className="digital-library-stage">
@@ -274,6 +280,46 @@ export function DigitalLibraryStage({
                 Next <ChevronRight size={18} />
               </button>
             </div>
+
+            {/* Live Student Readers Banner (visible to teacher during Free Read mode) */}
+            {isTeacher && !isLocked && (
+              <div
+                className="mt-3 flex flex-wrap items-center justify-center gap-2 rounded-xl border p-2.5 text-xs animate-in fade-in"
+                style={{
+                  borderColor: 'var(--eco-rule)',
+                  background: 'var(--eco-panel, var(--eco-ink-sunken))',
+                }}
+              >
+                <span className="flex items-center gap-1 font-semibold text-[var(--eco-cream-dim)]">
+                  <Sparkles size={13} className="text-[var(--eco-amber)]" />
+                  Student Readers:
+                </span>
+                {studentPositions.length === 0 ? (
+                  <span className="italic text-[var(--eco-cream-faint)]">
+                    All students currently reading with you on Page {localPage + 1}
+                  </span>
+                ) : (
+                  studentPositions.map((pos) => (
+                    <button
+                      key={pos.participantId}
+                      type="button"
+                      onClick={() => handlePageChange(pos.page)}
+                      className="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition hover:scale-105"
+                      style={{
+                        borderColor: 'color-mix(in srgb, var(--eco-amber) 40%, transparent)',
+                        background: 'color-mix(in srgb, var(--eco-amber) 12%, transparent)',
+                        color: 'var(--eco-cream)',
+                      }}
+                      title={`Click to jump to ${pos.displayName}'s view (Page ${pos.page + 1})`}
+                    >
+                      <span>{pos.displayName}:</span>
+                      <span className="font-bold text-[var(--eco-amber)]">Pg {pos.page + 1}</span>
+                      <span className="text-[10px] text-[var(--eco-cream-faint)]">↗ Jump</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
 
             {/* Student Catchup Banner if desynced */}
             {isDesyncedFromTeacher && (

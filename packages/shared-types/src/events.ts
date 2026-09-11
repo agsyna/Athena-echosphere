@@ -103,7 +103,8 @@ export type ClassroomEvent =
   | { kind: 'echosphere:library-lock'; payload: LibraryLockPayload }
   | { kind: 'echosphere:library-present'; payload: LibraryPresentPayload }
   | { kind: 'echosphere:library-book-added'; payload: LibraryBookAddedPayload }
-  | { kind: 'echosphere:library-book-removed'; payload: LibraryBookRemovedPayload };
+  | { kind: 'echosphere:library-book-removed'; payload: LibraryBookRemovedPayload }
+  | { kind: 'echosphere:library-student-position'; position: import('./library.js').StudentReadingPosition };
 
 export type ClassroomEventKind = ClassroomEvent['kind'];
 
