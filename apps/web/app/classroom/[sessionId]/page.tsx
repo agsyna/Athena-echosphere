@@ -8,7 +8,7 @@
  */
 
 'use client';
-
+import { ClassroomSpaceBackground } from '@/components/ClassroomSpaceBackground';
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ClassroomShell } from '@/components/classroom/ClassroomShell';
@@ -137,6 +137,7 @@ export default function ClassroomPage() {
 
   if (!identity) {
     return (
+      <ClassroomSpaceBackground>
       <main className="eco-room flex min-h-screen items-center justify-center p-6 text-sm text-[var(--eco-cream-dim)]">
         Loading…
       </main>
@@ -565,6 +566,7 @@ export default function ClassroomPage() {
         onClose={() => setShowCatchupBooking(false)}
       />
     </main>
+  </ClassroomSpaceBackground>
   );
 }
 
