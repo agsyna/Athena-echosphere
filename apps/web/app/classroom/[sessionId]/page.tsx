@@ -239,7 +239,8 @@ export default function ClassroomPage() {
   ];
 
   return (
-    <main className="eco-room mx-auto flex min-h-screen max-w-6xl flex-col gap-3 p-4 md:h-screen md:overflow-hidden">
+    <ClassroomSpaceBackground>
+      <main className="eco-room mx-auto flex min-h-screen max-w-6xl flex-col gap-3 p-4 md:h-screen md:overflow-hidden">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--eco-rule)] pb-4">
         <div className="flex flex-col gap-1">
           <h1 className="eco-display text-2xl text-[var(--eco-cream)]">
