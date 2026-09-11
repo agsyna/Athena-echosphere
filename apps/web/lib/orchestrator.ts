@@ -20,6 +20,9 @@ import type {
   BoardElement,
   BoardFile,
   WhiteboardJoin,
+  LibraryBook,
+  LibraryPublicState,
+  LibrarySearchResult,
 } from '@echosphere/shared-types';
 
 import { getAccessToken } from './supabase';
@@ -549,6 +552,82 @@ export const orchestrator = {
     request<{ original: string; translated: string; language: string }>(
       `/api/sessions/${sessionId}/translate`,
       { method: 'POST', body: JSON.stringify({ text, targetLanguage, sourceLanguage }) },
+    ),
+
+  // ─── Digital Library (Synced Textbook & Athena Citations) ─────────────────
+
+  getLibrary: (sessionId: string) =>
+    request<{
+      library: LibraryPublicState;
+      book: LibraryBook;
+      books: LibraryBook[];
+    }>(`/api/sessions/${sessionId}/library`),
+
+  getLibraryBooks: (sessionId: string) =>
+    request<{ books: LibraryBook[] }>(`/api/sessions/${sessionId}/library/books`),
+
+  addLibraryBook: (sessionId: string, participantId: string, book: LibraryBook) =>
+    request<{ ok: boolean; book: LibraryBook }>(
+      `/api/sessions/${sessionId}/library/books`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ participantId, book }),
+      },
+    ),
+
+  removeLibraryBook: (sessionId: string, participantId: string, bookId: string) =>
+    request<{ ok: boolean }>(
+      `/api/sessions/${sessionId}/library/books/${bookId}?participantId=${encodeURIComponent(participantId)}`,
+      {
+        method: 'DELETE',
+      },
+    ),
+
+  openLibraryBook: (sessionId: string, participantId: string, bookId: string) =>
+    request<{ ok: boolean; state: LibraryPublicState }>(
+      `/api/sessions/${sessionId}/library/open`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ participantId, bookId }),
+      },
+    ),
+
+  turnLibraryPage: (
+    sessionId: string,
+    participantId: string,
+    page: number,
+    bookId?: string,
+    glow?: boolean,
+  ) =>
+    request<{ ok: boolean; state: LibraryPublicState }>(
+      `/api/sessions/${sessionId}/library/turn`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ participantId, page, bookId, glow }),
+      },
+    ),
+
+  lockLibrary: (sessionId: string, participantId: string, locked: boolean) =>
+    request<{ ok: boolean; isLocked: boolean }>(
+      `/api/sessions/${sessionId}/library/lock`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ participantId, locked }),
+      },
+    ),
+
+  presentLibrary: (sessionId: string, participantId: string, presenting: boolean) =>
+    request<{ ok: boolean; isPresenting: boolean }>(
+      `/api/sessions/${sessionId}/library/present`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ participantId, presenting }),
+      },
+    ),
+
+  findLibraryPage: (sessionId: string, query: string, bookId?: string) =>
+    request<{ result: LibrarySearchResult | null }>(
+      `/api/sessions/${sessionId}/library/search?q=${encodeURIComponent(query)}${bookId ? `&bookId=${encodeURIComponent(bookId)}` : ''}`,
     ),
 
   /**

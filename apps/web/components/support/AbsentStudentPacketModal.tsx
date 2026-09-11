@@ -97,16 +97,28 @@ export function AbsentStudentPacketModal({
         parentNote: parentNote.trim(),
       });
 
+      // `res.emailSent` reports whether the server actually delivered the mail;
+      // a composed-but-undelivered packet used to show up here as a success.
+      const emailFailed = channel !== 'whatsapp' && res.emailSent === false;
+
       setDispatchStatus({
-        success: true,
+        success: !emailFailed,
         channel,
-        msg: `Successfully prepared ${channel.toUpperCase()} digest! (Receipt: ${res.deliveryReceiptId})`,
+        msg: emailFailed
+          ? `Email could not be sent: ${res.emailError ?? 'unknown error'}. Opening your mail app as a fallback.`
+          : res.emailSent
+          ? `Email sent to ${recipientEmail || 'the parent on file'} via ${res.emailProvider}. (Receipt: ${res.deliveryReceiptId})`
+          : `Successfully prepared ${channel.toUpperCase()} digest! (Receipt: ${res.deliveryReceiptId})`,
         whatsappLink: res.whatsappDeepLink,
       });
 
       if (channel === 'whatsapp' || channel === 'both') {
         window.open(res.whatsappDeepLink, '_blank');
-      } else if (channel === 'email') {
+      }
+
+      // Only hand the teacher a mailto when the server could not deliver —
+      // doing it unconditionally made a failed send look like a successful one.
+      if (emailFailed) {
         const mailto = `mailto:${encodeURIComponent(recipientEmail)}?subject=${encodeURIComponent(res.emailSubject)}&body=${encodeURIComponent(res.whatsappMessageText)}`;
         window.location.href = mailto;
       }

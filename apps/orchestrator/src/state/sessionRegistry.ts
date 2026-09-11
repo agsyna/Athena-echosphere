@@ -281,6 +281,9 @@ export interface ClassroomSession {
   /** Who is currently presenting a 3D model, if anyone — only one at a time. */
   activeModel: { participantId: string; displayName: string; modelId: string } | null;
 
+  /** Digital Library shared textbook state. */
+  library: import('@echosphere/shared-types').LibraryPublicState;
+
   /** Primary classroom language (e.g. 'en', 'fr', 'es', 'hi', 'de', 'ta', 'te'). */
   language: import('@echosphere/shared-types').LanguageCode;
 
@@ -345,6 +348,16 @@ export function createSession(
       presenting: null,
       scene: [],
       files: [],
+    },
+    library: {
+      activeBookId: 'ncert-7-ch2',
+      currentPage: 0,
+      isLocked: true,
+      isPresenting: false,
+      presenterId: null,
+      lastSequence: 0,
+      glowPage: null,
+      studentPositions: {},
     },
     raisedHands: new Set(),
     screenShareAllowed: new Set(),

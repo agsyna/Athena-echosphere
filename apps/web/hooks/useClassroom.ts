@@ -32,6 +32,8 @@ import type {
   BoardFile,
   WhiteboardJoin,
   WhiteboardPublicState,
+  LibraryPublicState,
+  LibraryBook,
 } from '@echosphere/shared-types';
 import { orchestrator } from '@/lib/orchestrator';
 
@@ -135,6 +137,19 @@ export interface ClassroomView {
   /** Non-null while someone is presenting a 3D model, mirroring activeWhiteboard. */
   activeModel: ActiveModel | null;
   presentModel: (modelId: string | null) => Promise<void>;
+
+  /** Digital Library shared state and operations. */
+  library: LibraryPublicState | null;
+  libraryBook: LibraryBook | null;
+  libraryBooks: LibraryBook[];
+  turnLibraryPage: (page: number) => Promise<void>;
+  toggleLibraryLock: (locked: boolean) => Promise<void>;
+  presentLibrary: (presenting: boolean) => Promise<void>;
+  citeLibraryPage: (page: number, citationText?: string) => Promise<void>;
+  selectLibraryBook: (bookId: string) => Promise<void>;
+  addLibraryBook: (book: LibraryBook) => Promise<void>;
+  removeLibraryBook: (bookId: string) => Promise<void>;
+  refreshLibrary: () => Promise<void>;
 }
 
 /** Keeps the rendered transcript bounded; the full log lives on the server. */
@@ -176,8 +191,23 @@ export function useClassroom(
   const [screenShareAllowed, setScreenShareAllowed] = useState<string[]>([]);
   const [activeScreenShare, setActiveScreenShare] = useState<ActiveScreenShare | null>(null);
   const [activeModel, setActiveModel] = useState<ActiveModel | null>(null);
+  const [library, setLibrary] = useState<LibraryPublicState | null>(null);
+  const activeLibraryBookId = library?.activeBookId;
+  const [libraryBook, setLibraryBook] = useState<LibraryBook | null>(null);
+  const [libraryBooks, setLibraryBooks] = useState<LibraryBook[]>([]);
 
   const sourceRef = useRef<EventSource | null>(null);
+
+  const refreshLibrary = useCallback(async () => {
+    try {
+      const res = await orchestrator.getLibrary(sessionId);
+      if (res.library) setLibrary(res.library);
+      if (res.book) setLibraryBook(res.book);
+      if (res.books) setLibraryBooks(res.books);
+    } catch {
+      // Ignored
+    }
+  }, [sessionId]);
 
   const apply = useCallback((event: ClassroomEvent) => {
     switch (event.kind) {
@@ -194,6 +224,10 @@ export function useClassroom(
           setActiveWhiteboard(event.state.whiteboard.presenting ?? null);
           setBoardScene(event.state.whiteboard.scene ?? []);
           setBoardFiles(event.state.whiteboard.files ?? []);
+        }
+        if (event.state.library) {
+          setLibrary(event.state.library);
+          void refreshLibrary();
         }
         if (event.state.workspace) setWorkspace(event.state.workspace);
         if (event.state.targetedReadings) setTargetedReadings(event.state.targetedReadings);
@@ -503,8 +537,112 @@ export function useClassroom(
           prev?.participantId === event.participantId ? null : prev,
         );
         break;
+
+      case 'echosphere:library-state':
+        setLibrary(event.state);
+        if (event.state?.activeBookId) {
+          setLibraryBooks((prev) => {
+            const found = prev.find((b) => b.id === event.state.activeBookId);
+            if (found) setLibraryBook(found);
+            return prev;
+          });
+          void refreshLibrary();
+        }
+        break;
+
+      case 'echosphere:library-open':
+        setLibrary((prev) =>
+          prev
+            ? {
+                ...prev,
+                activeBookId: event.payload.bookId,
+                currentPage: 0,
+              }
+            : {
+                activeBookId: event.payload.bookId,
+                currentPage: 0,
+                isLocked: true,
+                isPresenting: false,
+                presenterId: null,
+                lastSequence: 0,
+                glowPage: null,
+              },
+        );
+        setLibraryBooks((prev) => {
+          const found = prev.find((b) => b.id === event.payload.bookId);
+          if (found) setLibraryBook(found);
+          return prev;
+        });
+        void refreshLibrary();
+        break;
+
+      case 'echosphere:library-book-added':
+        setLibraryBooks((prev) => {
+          const filtered = prev.filter((b) => b.id !== event.payload.bookId);
+          return [...filtered, event.payload.book];
+        });
+        setLibraryBook((prev) => (!prev || prev.id === event.payload.bookId ? event.payload.book : prev));
+        void refreshLibrary();
+        break;
+
+      case 'echosphere:library-book-removed':
+        setLibraryBooks((prev) => prev.filter((b) => b.id !== event.payload.bookId));
+        setLibraryBook((prev) => (prev?.id === event.payload.bookId ? null : prev));
+        void refreshLibrary();
+        break;
+
+      case 'echosphere:library-page':
+        setLibrary((prev) =>
+          prev
+            ? {
+                ...prev,
+                activeBookId: event.payload.bookId,
+                currentPage: event.payload.page,
+                lastSequence: Math.max(prev.lastSequence, event.payload.seq),
+                glowPage: event.payload.glow ? event.payload.page : null,
+              }
+            : null,
+        );
+        break;
+
+      case 'echosphere:library-lock':
+        setLibrary((prev) =>
+          prev
+            ? {
+                ...prev,
+                isLocked: event.payload.locked,
+              }
+            : null,
+        );
+        break;
+
+      case 'echosphere:library-present':
+        setLibrary((prev) =>
+          prev
+            ? {
+                ...prev,
+                isPresenting: event.payload.presenting,
+                presenterId: event.payload.presenterId,
+              }
+            : null,
+        );
+        break;
+
+      case 'echosphere:library-student-position':
+        setLibrary((prev) => {
+          if (!prev) return null;
+          const currentPositions = prev.studentPositions || {};
+          return {
+            ...prev,
+            studentPositions: {
+              ...currentPositions,
+              [event.position.participantId]: event.position,
+            },
+          };
+        });
+        break;
     }
-  }, [participantId]);
+  }, [participantId, refreshLibrary]);
 
   useEffect(() => {
     if (!participantId) return;
@@ -631,6 +769,135 @@ export function useClassroom(
     }
   }, [sessionId]);
 
+  useEffect(() => {
+    void refreshLibrary();
+  }, [refreshLibrary]);
+
+  // Reactive synchronization: ensure libraryBook is always matched with library.activeBookId
+  useEffect(() => {
+    if (!library?.activeBookId) return;
+    const found = libraryBooks.find((b) => b.id === library.activeBookId);
+    if (found) {
+      setLibraryBook((current) => (current?.id === found.id ? current : found));
+    } else {
+      void refreshLibrary();
+    }
+  }, [library?.activeBookId, libraryBooks, refreshLibrary]);
+
+  const selectLibraryBook = useCallback(
+    async (bookId: string) => {
+      setLibraryBooks((prev) => {
+        const found = prev.find((b) => b.id === bookId);
+        if (found) {
+          setLibraryBook(found);
+        }
+        return prev;
+      });
+      setLibrary((prev) => (prev ? { ...prev, activeBookId: bookId, currentPage: 0 } : null));
+      if (!participantId) return;
+      try {
+        const res = await orchestrator.openLibraryBook(sessionId, participantId, bookId);
+        if (res?.state) setLibrary(res.state);
+        await refreshLibrary();
+      } catch (err) {
+        console.error('Select library book failed', err);
+      }
+    },
+    [sessionId, participantId, refreshLibrary],
+  );
+
+  const addLibraryBook = useCallback(
+    async (book: LibraryBook) => {
+      setLibraryBooks((prev) => {
+        const filtered = prev.filter((b) => b.id !== book.id);
+        return [...filtered, book];
+      });
+      setLibraryBook(book);
+      if (!participantId) return;
+      try {
+        await orchestrator.addLibraryBook(sessionId, participantId, book);
+        await refreshLibrary();
+      } catch (err) {
+        console.error('Add library book failed', err);
+        throw err;
+      }
+    },
+    [sessionId, participantId, refreshLibrary],
+  );
+
+  const removeLibraryBook = useCallback(
+    async (bookId: string) => {
+      setLibraryBooks((prev) => prev.filter((b) => b.id !== bookId));
+      if (!participantId) return;
+      try {
+        await orchestrator.removeLibraryBook(sessionId, participantId, bookId);
+        await refreshLibrary();
+      } catch (err) {
+        console.error('Remove library book failed', err);
+        throw err;
+      }
+    },
+    [sessionId, participantId, refreshLibrary],
+  );
+
+  const turnLibraryPage = useCallback(
+    async (page: number) => {
+      setLibrary((prev) => (prev ? { ...prev, currentPage: page } : null));
+      if (!participantId) return;
+      try {
+        const res = await orchestrator.turnLibraryPage(sessionId, participantId, page, activeLibraryBookId);
+        if (res?.state) setLibrary(res.state);
+      } catch (err) {
+        console.error('Turn library page failed', err);
+      }
+    },
+    [sessionId, participantId, activeLibraryBookId],
+  );
+
+  const toggleLibraryLock = useCallback(
+    async (locked: boolean) => {
+      if (!participantId) return;
+      try {
+        const res = await orchestrator.lockLibrary(sessionId, participantId, locked);
+        setLibrary((prev) => (prev ? { ...prev, isLocked: res.isLocked } : null));
+      } catch (err) {
+        console.error('Toggle library lock failed', err);
+      }
+    },
+    [sessionId, participantId],
+  );
+
+  const presentLibrary = useCallback(
+    async (presenting: boolean) => {
+      if (!participantId) return;
+      try {
+        const res = await orchestrator.presentLibrary(sessionId, participantId, presenting);
+        setLibrary((prev) => (prev ? { ...prev, isPresenting: res.isPresenting } : null));
+      } catch (err) {
+        console.error('Present library failed', err);
+      }
+    },
+    [sessionId, participantId],
+  );
+
+  const citeLibraryPage = useCallback(
+    async (page: number, citationText?: string) => {
+      if (!participantId) return;
+      try {
+        await orchestrator.turnLibraryPage(
+          sessionId,
+          participantId,
+          page,
+          activeLibraryBookId,
+          true, // glow
+        );
+      } catch (err) {
+        console.error('Cite library page failed', err);
+      }
+    },
+    [sessionId, participantId, activeLibraryBookId],
+  );
+
   /** Optimistic local echo so the tapped option shows immediately. */
   const recordAnswer = useCallback((quizId: string, answer: string) => {
     setQuizzes((prev) =>
@@ -721,5 +988,16 @@ export function useClassroom(
     setScreenSharePermission,
     activeModel,
     presentModel,
+    library,
+    libraryBook,
+    libraryBooks,
+    turnLibraryPage,
+    toggleLibraryLock,
+    presentLibrary,
+    citeLibraryPage,
+    selectLibraryBook,
+    addLibraryBook,
+    removeLibraryBook,
+    refreshLibrary,
   };
 }

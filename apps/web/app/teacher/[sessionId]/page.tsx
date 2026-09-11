@@ -51,6 +51,7 @@ import { Model3DPicker } from '@/components/classroom/Model3DPicker';
 import { TeacherToolsBag } from '@/components/classroom/TeacherToolsBag';
 import { ScreenShareStage } from '@/components/classroom/ScreenShareStageLazy';
 import { ExcalidrawBoard } from '@/components/classroom/ExcalidrawBoardLazy';
+import { DigitalLibraryStage } from '@/components/library/DigitalLibraryStageLazy';
 import { AnnotateToggle } from '@/components/classroom/AnnotateToggle';
 import { ScreenShareControls } from '@/components/classroom/ScreenShareControls';
 import { ClassroomDrawer, type DrawerTab } from '@/components/classroom/ClassroomDrawer';
@@ -65,7 +66,6 @@ import { RestraintMeter } from '@/components/meraki/RestraintMeter';
 import { SuppressedInterventionsPanel } from '@/components/meraki/SuppressedInterventionsPanel';
 import { MiroWorkspacePane } from '@/components/workspace/MiroWorkspacePane';
 import { AbsentStudentPacketModal } from '@/components/support/AbsentStudentPacketModal';
-import { TargetedReadingPanel } from '@/components/support/TargetedReadingPanel';
 import { CatchupBookingModal } from '@/components/support/CatchupBookingModal';
 import { LanguageSelector } from '@/components/support/LanguageSelector';
 import { CatchupChatbot } from '@/components/classroom/CatchupChatbot';
@@ -179,12 +179,28 @@ export default function TeacherDashboardPage() {
   const [activeToolPanel, setActiveToolPanel] = useState<'quiz' | 'gaps' | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     const stored = loadIdentity(sessionId);
     if (!stored || stored.role !== 'teacher') {
       router.replace('/join');
       return;
     }
-    setIdentity(stored);
+
+    void orchestrator
+      .resume(sessionId, stored.participantId)
+      .then(() => {
+        if (!cancelled) setIdentity(stored);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        clearIdentity();
+        router.replace('/join');
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [sessionId, router]);
 
   const view = useClassroom(sessionId, identity?.participantId ?? null);
@@ -458,16 +474,28 @@ export default function TeacherDashboardPage() {
       ),
     },
     {
-      id: 'reading',
-      label: t('tabSupport', lang),
+      id: 'insights',
+      label: t('tabGaps', lang),
       content: (
-        <TargetedReadingPanel
-          sessionId={sessionId}
-          participantId={identity.participantId}
-          role="teacher"
-          readings={view.targetedReadings}
-          onRefresh={() => void orchestrator.getTargetedReadings(sessionId)}
-        />
+        <div className="flex flex-col gap-5">
+          <RestraintMeter
+            state={view.restraintMeterState}
+            score={view.restraintScore}
+          />
+          <SuppressedInterventionsPanel
+            interventions={view.suppressedInterventions}
+          />
+          <GapPanel
+            gaps={view.gaps}
+            participants={view.participants}
+            onQuiz={(topic, targetStudentIds) =>
+              void send({ type: 'START_QUIZ', topic, targetStudentIds })
+            }
+            language={lang}
+          />
+          <BlockedAttempts attempts={view.blockedAttempts} language={lang} />
+          <IllustrationFailures failures={view.illustrationFailures} language={lang} />
+        </div>
       ),
     },
     {
@@ -549,6 +577,45 @@ export default function TeacherDashboardPage() {
             )}
           </div>
         </div>
+      ),
+    },
+    {
+      id: 'library',
+      label: 'Digital Library',
+      content: view.libraryBook ? (
+        <DigitalLibraryStage
+          sessionId={sessionId}
+          participantId={identity.participantId}
+          role="teacher"
+          library={view.library}
+          book={view.libraryBook}
+          books={view.libraryBooks}
+          participants={view.participants}
+          onTurnPage={view.turnLibraryPage}
+          onToggleLock={view.toggleLibraryLock}
+          onCitePage={view.citeLibraryPage}
+          onSelectBook={view.selectLibraryBook}
+          onAddBook={view.addLibraryBook}
+          onRemoveBook={view.removeLibraryBook}
+        />
+      ) : (
+        <div className="flex flex-col items-center justify-center p-8 gap-3 text-center">
+          <p className="text-sm text-[var(--eco-cream-dim)]">Loading textbook…</p>
+          <button
+            type="button"
+            onClick={() => void view.refreshLibrary()}
+            className="text-xs px-3 py-1.5 rounded-lg border border-[var(--eco-rule)] text-[var(--eco-cream-faint)] hover:text-[var(--eco-cream)] hover:border-[var(--eco-cream-dim)] transition"
+          >
+            Retry / Refresh Textbook
+          </button>
+        </div>
+      ),
+    },
+    {
+      id: 'quizzes',
+      label: t('tabQuizzes', lang),
+      content: (
+        <QuizCards quizzes={view.quizzes} canAnswer={false} onAnswer={() => undefined} language={lang} />
       ),
     },
   ];
@@ -852,6 +919,23 @@ export default function TeacherDashboardPage() {
                     <div className="eco-panel relative min-h-0 flex-1 overflow-hidden">
                       <Model3DStage modelId={view.activeModel.modelId} />
                     </div>
+                  ) : view.library?.isPresenting && view.libraryBook ? (
+                    <DigitalLibraryStage
+                      sessionId={sessionId}
+                      participantId={identity.participantId}
+                      role="teacher"
+                      library={view.library}
+                      book={view.libraryBook}
+                      books={view.libraryBooks}
+                      participants={view.participants}
+                      onTurnPage={view.turnLibraryPage}
+                      onToggleLock={view.toggleLibraryLock}
+                      onCitePage={view.citeLibraryPage}
+                      onSelectBook={view.selectLibraryBook}
+                      onAddBook={view.addLibraryBook}
+                      onRemoveBook={view.removeLibraryBook}
+                      onCloseStage={() => void view.presentLibrary(false)}
+                    />
                   ) : (
                     <ParticipantGrid
                       sessionId={sessionId}

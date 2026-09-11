@@ -18,6 +18,30 @@ const TEACHER_PROMPTS = [
   'Draft a board challenge problem',
 ];
 
+function displayText(text: string): string {
+  return text
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/gm, '')
+    .replace(/^\s*\|(.+)\|\s*$/gm, (_, row: string) =>
+      `- ${row
+        .split('|')
+        .map((cell) => cell.trim())
+        .filter(Boolean)
+        .join(' - ')}`,
+    )
+    .replace(/\\\(([\s\S]*?)\\\)/g, '$1')
+    .replace(/\\\[([\s\S]*?)\\\]/g, '$1')
+    .replace(/\$\$?([^$]+)\$\$?/g, '$1')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/__(.*?)__/g, '$1')
+    .replace(/(^|\s)[*_]([^*_]+)[*_](?=\s|$)/g, '$1$2')
+    .replace(/\\([()[\]{}])/g, '$1')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export function CatchupChatbot({
   sessionId,
   participantId,
@@ -209,9 +233,9 @@ export function CatchupChatbot({
                       isUser
                         ? 'bg-amber-400 text-slate-950 font-medium rounded-tr-sm'
                         : 'bg-[var(--eco-ink-sunken)] text-[var(--eco-cream)]/90 border border-[var(--eco-rule)]/60 rounded-tl-sm shadow-sm'
-                    }`}
-                  >
-                    <p className="whitespace-pre-line">{message.text}</p>
+                  }`}
+                >
+                    <p className="whitespace-pre-line">{displayText(message.text)}</p>
                   </div>
                 </div>
               );

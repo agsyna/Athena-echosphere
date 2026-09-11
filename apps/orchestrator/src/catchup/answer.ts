@@ -1,8 +1,15 @@
 /**
  * Student catch-up answers. Private text — does not start a second Agora
  * ConvoAI agent on the classroom channel (that would speak over the lesson).
- * Grounds replies in transcript + lesson retrieval + workspace notes, then
- *`tryComplete` when a provider key exists.
+ *
+ * A student's reply is grounded in the live class transcript and nothing else:
+ * only what was actually said in the room may be reported as having happened in
+ * class. Questions the transcript does not cover are still answered when they
+ * belong to the subject the class is on; anything off that subject is declined.
+ *
+ * A teacher's reply is unrestricted — lesson documents and workspace notes stay
+ * in their grounding, because that panel is a planning copilot rather than a
+ * record of the lesson.
  */
 
 import type { CatchupMessage, CatchupReply, CatchupSource } from '@echosphere/shared-types';
@@ -12,6 +19,8 @@ import { rollingTranscript } from '../state/sessionRegistry.js';
 
 const MAX_THREAD = 24;
 const MAX_SNIPPET = 280;
+const RECAP_TRANSCRIPT_WINDOW = 80;
+const RECAP_TRANSCRIPT_SOURCES = 24;
 
 function isEducationalQuery(question: string, sessionTitle: string): { isEdu: boolean; reason?: string } {
   const lower = question.toLowerCase();
@@ -58,13 +67,24 @@ export async function answerCatchup(
   const userTurn: CatchupMessage = { role: role === 'teacher' ? 'teacher' : 'student', text, at: now };
 
   if (!guardCheck.isEdu) {
-    const athenaTurn: CatchupMessage = { role: 'athena', text: guardCheck.reason!, at: Date.now() };
+    const athenaTurn: CatchupMessage = {
+      role: 'athena',
+      text: sanitizeCatchupText(guardCheck.reason!),
+      at: Date.now(),
+    };
     const history = [...thread, userTurn, athenaTurn].slice(-MAX_THREAD);
     session.catchupByParticipant.set(participantId, history);
-    return { reply: guardCheck.reason!, sources: [], history };
+    return { reply: athenaTurn.text, sources: [], history };
   }
 
-  const sources = gatherSources(session, text);
+  const sources = gatherSources(session, text, role === 'teacher' ? 'teacher' : 'student');
+  if (role !== 'teacher' && isStudentRecapQuery(text)) {
+    const reply = transcriptRecapReply(session);
+    const athenaTurn: CatchupMessage = { role: 'athena', text: reply, at: Date.now() };
+    const history = [...thread, userTurn, athenaTurn].slice(-MAX_THREAD);
+    session.catchupByParticipant.set(participantId, history);
+    return { reply, sources: recapTranscriptSources(session), history };
+  }
 
   const generated = await tryComplete(
     [
@@ -81,7 +101,7 @@ export async function answerCatchup(
     { temperature: 0.4, maxTokens: 1000 },
   );
 
-  const replyText = (generated ?? fallbackReply(text, sources, session.title)).trim();
+  const replyText = sanitizeCatchupText(generated ?? fallbackReply(text, sources, session.title));
   const athenaTurn: CatchupMessage = { role: 'athena', text: replyText, at: Date.now() };
   const history = [...thread, userTurn, athenaTurn].slice(-MAX_THREAD);
   session.catchupByParticipant.set(participantId, history);
@@ -93,10 +113,165 @@ export function catchupHistory(
   session: ClassroomSession,
   participantId: string,
 ): CatchupMessage[] {
-  return session.catchupByParticipant.get(participantId) ?? [];
+  return (session.catchupByParticipant.get(participantId) ?? []).map((message) =>
+    message.role === 'athena'
+      ? { ...message, text: sanitizeCatchupText(message.text) }
+      : message,
+  );
 }
 
-function gatherSources(session: ClassroomSession, query: string): CatchupSource[] {
+/**
+ * How much of the live transcript a student's answer is grounded in.
+ *
+ * Wider than the teacher's window on purpose. A student's reply may only claim
+ * something happened in class if it is in this block, so the block has to be
+ * big enough for the model to tell "not asked about yet" from "never said" —
+ * three word-matched lines cannot support that judgement.
+ */
+const STUDENT_TRANSCRIPT_WINDOW = 40;
+const STUDENT_TRANSCRIPT_SOURCES = 16;
+const STUDENT_TAIL = 10;
+
+function speakerLabel(speaker: string): string {
+  return speaker === 'agent' ? 'Athena' : speaker === 'teacher' ? 'Teacher' : 'Student';
+}
+
+function isStudentRecapQuery(question: string): boolean {
+  const lower = question.toLowerCase();
+  return (
+    /\b(what|wht)\b.*\b(taught|covered|happened|missed|said|discussed)\b/.test(lower) ||
+    /\b(taught|covered|happened|missed|recap|summary|catch up|so far)\b/.test(lower)
+  );
+}
+
+function recapTranscriptSources(session: ClassroomSession): CatchupSource[] {
+  return rollingTranscript(session, RECAP_TRANSCRIPT_WINDOW)
+    .slice(-RECAP_TRANSCRIPT_SOURCES)
+    .map((seg) => ({
+      kind: 'transcript' as const,
+      snippet: clip(`${speakerLabel(seg.speaker)}: ${seg.text}`),
+    }));
+}
+
+function transcriptRecapReply(session: ClassroomSession): string {
+  const sources = recapTranscriptSources(session);
+  if (sources.length === 0) {
+    return [
+      'I do not have any transcript from this class yet, so I cannot say that anything has been taught so far.',
+      'Once the teacher or Athena speaks and the transcript starts arriving, I can recap exactly what was covered.',
+    ].join('\n');
+  }
+
+  const lines = sources.map((source) => `- ${source.snippet}`);
+  return [
+    'Here is what the class transcript shows so far:',
+    ...lines,
+    'I am only using the live transcript here, not the lesson title or seeded lesson notes.',
+  ].join('\n');
+}
+
+function sanitizeMarkdownTables(text: string): string {
+  const lines = text.split(/\r?\n/);
+  const cleaned: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const cells = trimmed
+      .replace(/^\|/, '')
+      .replace(/\|$/, '')
+      .split('|')
+      .map((cell) => cell.trim())
+      .filter(Boolean);
+
+    if (cells.length >= 2 && cells.every((cell) => /^:?-{3,}:?$/.test(cell))) {
+      continue;
+    }
+
+    if (cells.length >= 2 && trimmed.includes('|')) {
+      cleaned.push(`- ${cells.join(' - ')}`);
+      continue;
+    }
+
+    cleaned.push(line);
+  }
+
+  return cleaned.join('\n');
+}
+
+export function sanitizeCatchupText(text: string): string {
+  return sanitizeMarkdownTables(text)
+    .trim()
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^\s*-{3,}\s*$/gm, '')
+    .replace(/\\\((.*?)\\\)/gs, '$1')
+    .replace(/\\\[(.*?)\\\]/gs, '$1')
+    .replace(/\$\$?([^$]+)\$\$?/g, '$1')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/__(.*?)__/g, '$1')
+    .replace(/(^|\s)[*_]([^*_]+)[*_](?=\s|$)/g, '$1$2')
+    .replace(/\\([()[\]{}])/g, '$1')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n');
+}
+
+/**
+ * The spoken record of this class, most recent last.
+ *
+ * Both the lines that match the question and the tail of the lesson are
+ * included: the match is what the student asked about, and the tail is what the
+ * class is doing right now, which is what makes "is this related to our
+ * lesson?" answerable at all.
+ */
+function transcriptSources(session: ClassroomSession, query: string): CatchupSource[] {
+  const recent = rollingTranscript(session, STUDENT_TRANSCRIPT_WINDOW);
+  if (recent.length === 0) return [];
+
+  const words = query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length > 3);
+  const matched = new Set(
+    recent.filter((seg) => {
+      const hay = seg.text.toLowerCase();
+      return words.some((w) => hay.includes(w));
+    }),
+  );
+  for (const seg of recent.slice(-STUDENT_TAIL)) matched.add(seg);
+
+  // Chronological, because the order the class said things in is part of the
+  // meaning — a recap read out of sequence is a different lesson.
+  return recent
+    .filter((seg) => matched.has(seg))
+    .slice(-STUDENT_TRANSCRIPT_SOURCES)
+    .map((seg) => ({
+      kind: 'transcript' as const,
+      snippet: clip(`${speakerLabel(seg.speaker)}: ${seg.text}`),
+    }));
+}
+
+/**
+ * Grounding material for one answer.
+ *
+ * A student gets the spoken transcript and nothing else. Seeded or uploaded
+ * lesson documents are deliberately excluded: `retrieveSync` never returns
+ * empty — on a no-match it falls back to document order — so a lesson document
+ * offered here as "class record" gets narrated back as though the class had
+ * said it, which is exactly how a photosynthesis discussion came back as a
+ * recap of the demo fractions lesson.
+ *
+ * A teacher still gets lesson documents and workspace notes. Their panel is a
+ * planning copilot, not a record of what was said, and it is read by the person
+ * who knows which is which.
+ */
+function gatherSources(
+  session: ClassroomSession,
+  query: string,
+  role: 'teacher' | 'student',
+): CatchupSource[] {
+  if (role === 'student') return transcriptSources(session, query);
+
   const sources: CatchupSource[] = [];
 
   const retrieved = session.lesson.retrieveSync(query, 3);
@@ -114,9 +289,7 @@ function gatherSources(session: ClassroomSession, query: string): CatchupSource[
     .slice(-4);
   const transcriptPick = fromTranscript.length > 0 ? fromTranscript : recent.slice(-3);
   for (const seg of transcriptPick) {
-    const who =
-      seg.speaker === 'agent' ? 'Athena' : seg.speaker === 'teacher' ? 'Teacher' : 'Student';
-    sources.push({ kind: 'transcript', snippet: clip(`${who}: ${seg.text}`) });
+    sources.push({ kind: 'transcript', snippet: clip(`${speakerLabel(seg.speaker)}: ${seg.text}`) });
   }
 
   for (const note of (session.workspace?.notes ?? []).slice(-3)) {
@@ -135,7 +308,7 @@ function catchupSystemPrompt(
   const sourceBlock =
     sources.length > 0
       ? sources.map((s) =>`- [${s.kind}] ${s.snippet}`).join('\n')
-      : '- (no specific classroom notes or spoken transcript for this specific topic)';
+      : '- (nothing has been spoken in this class yet)';
 
   if (role === 'teacher') {
     return`You are Athena, an elite, universal AI Co-Teacher & Pedagogical Assistant helping Teacher ${userName} in "${session.title}".
@@ -148,21 +321,45 @@ Your capabilities for the teacher:
 4. Ground responses in this session's ongoing records when relevant.
 
 Live class record:
-${sourceBlock}`;
+${sourceBlock}
+
+Formatting rules:
+- Reply in plain chat text only.
+- Do not use markdown tables, markdown headings, bold markers, italics markers, HTML, or LaTeX wrappers.
+- Prefer short sections with simple dash bullets.
+- Write formulas in plain text, such as CO2 + H2O -> glucose + O2.`;
   }
 
-  return`You are Athena, an expert, encouraging AI Tutor & Educational Assistant helping student ${userName} in "${session.title}".
-You have deep, comprehensive knowledge across ALL educational topics (Mathematics, Algebra, Geometry, Physics, Chemistry, Biology, History, Geography, Computer Science, Literature, Grammar, Study Skills, and Homework Help).
+  const hasTranscript = sources.length > 0;
 
-GUIDELINES:
-1. Answer ANY and ALL educational questions thoroughly, accurately, and step-by-step with intuitive real-world analogies and examples.
-2. If the student asks about what was said in the current class or what they missed, prioritize the classroom record below.
-3. If the student asks about other educational subjects (e.g. "What is photosynthesis?", "How to solve 3x+7=22?", "Explain gravity", "Who wrote Romeo and Juliet?"), answer clearly and pedagogically!
-4. Only decline non-educational entertainment/gossip (e.g., video games, celebrity gossip) and politely invite them to ask about school subjects.
-5. Format formulas, numbered steps, and key concepts cleanly with bolding and bullet points.
+  return`You are Athena, an encouraging AI tutor helping student ${userName} in the live class "${session.title}".
 
-Current class record:
-${sourceBlock}`;
+The CLASS TRANSCRIPT below is the complete, word-for-word record of everything spoken in this class so far. It is your only knowledge of what has actually happened in the room.
+
+CLASS TRANSCRIPT:
+${sourceBlock}
+
+WHAT THIS CLASS IS ABOUT: ${
+    hasTranscript
+      ? 'whatever subject the transcript above is actually about. Work that out from the transcript itself. The lesson is titled "' +
+        session.title +
+        '", but the transcript is what the class is really doing, and it wins whenever the two disagree.'
+      : 'the transcript is EMPTY — nothing has been spoken in this class yet — so go by the lesson title, "' +
+        session.title +
+        '".'
+  }
+
+RULES — follow all of them, in this order:
+1. The transcript is the ONLY source for what was said, taught, covered, asked or written in this class. When the student asks what they missed, what was just said, what the teacher said, or for a recap, answer STRICTLY from the transcript above: summarise it in your own words and name who said each part. You may quote it.
+2. NEVER state or imply that something was said, taught or covered in class unless it appears in the transcript above. Do not invent lessons, examples, worked problems or teacher remarks. ${
+    hasTranscript
+      ? 'If the transcript does not cover what they asked about, say plainly that it has not come up in class yet — then still help them under rule 3 or 4.'
+      : 'Nothing has been spoken yet, so say so plainly if they ask what they missed or what was said — then still help them under rule 4.'
+  }
+3. Anything the transcript touches on is always fair to help with, and you may go well beyond repeating it: re-explain it more slowly, break it into steps, give a real-world analogy, or set a practice problem. Answer follow-up questions that dig deeper into any subject the transcript raises, even where the transcript itself does not contain the answer — say when the explanation is your own rather than the teacher's.
+4. A question the transcript does not cover but which belongs to the same subject as this class is also fair to answer: explain it fully from your own knowledge, clearly and step by step, and make clear it is your own explanation rather than something from the lesson.
+5. Only if the question belongs to a plainly different subject, or is not schoolwork at all, decline it: say it is outside what this class is on and invite a question about the lesson. Never decline something the transcript raised.
+6. Reply in plain sentences and simple dashed lists. Do NOT use markdown or LaTeX — no **, no ##, no $...$ or \\[...\\] — because this chat window shows those symbols literally. Write formulas as plain text, such as 2/5 + 1/10 = 1/2.`;
 }
 
 function fallbackReply(question: string, sources: CatchupSource[], sessionTitle: string): string {
@@ -239,5 +436,3 @@ function clip(text: string): string {
   if (t.length <= MAX_SNIPPET) return t;
   return`${t.slice(0, MAX_SNIPPET - 1)}…`;
 }
-
-

@@ -27,6 +27,15 @@ import type {
 } from './whiteboard.js';
 import type { MiroWorkspaceState, MiroStickyNote, MiroCommand } from './workspace.js';
 import type { TargetedReadingItem, CatchupAvailabilitySlot, LanguageCode } from './support.js';
+import type {
+  LibraryPublicState,
+  LibraryOpenPayload,
+  LibraryPageTurnPayload,
+  LibraryLockPayload,
+  LibraryPresentPayload,
+  LibraryBookAddedPayload,
+  LibraryBookRemovedPayload,
+} from './library.js';
 
 /** Discriminator prefix so classroom events are never confused with Agora's own. */
 export const ECHOSPHERE_EVENT_PREFIX = 'echosphere:' as const;
@@ -128,7 +137,15 @@ export type ClassroomEvent =
   | { kind: 'echosphere:catchup-slots-updated'; slots: CatchupAvailabilitySlot[] }
   | { kind: 'echosphere:hand-raised'; participantId: string; displayName: string; at: number }
   | { kind: 'echosphere:hand-lowered'; participantId: string }
-  | { kind: 'echosphere:language-changed'; participantId: string; language: LanguageCode };
+  | { kind: 'echosphere:language-changed'; participantId: string; language: LanguageCode }
+  | { kind: 'echosphere:library-state'; state: LibraryPublicState }
+  | { kind: 'echosphere:library-open'; payload: LibraryOpenPayload }
+  | { kind: 'echosphere:library-page'; payload: LibraryPageTurnPayload }
+  | { kind: 'echosphere:library-lock'; payload: LibraryLockPayload }
+  | { kind: 'echosphere:library-present'; payload: LibraryPresentPayload }
+  | { kind: 'echosphere:library-book-added'; payload: LibraryBookAddedPayload }
+  | { kind: 'echosphere:library-book-removed'; payload: LibraryBookRemovedPayload }
+  | { kind: 'echosphere:library-student-position'; position: import('./library.js').StudentReadingPosition };
 
 /** Who is presenting a 3D model, if anyone — mirrors ActiveWhiteboard/activeScreenShare. */
 export interface ActiveModel {
@@ -209,6 +226,7 @@ export interface RoomState {
    * anyone is already sharing.
    */
   whiteboard?: WhiteboardPublicState;
+  library?: LibraryPublicState;
   screenShareAllowed?: string[];
   activeScreenShare?: { participantId: string; displayName: string } | null;
   activeModel?: ActiveModel | null;

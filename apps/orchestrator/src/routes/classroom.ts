@@ -38,7 +38,7 @@ import { rankedGaps } from '../gaps/gapDetector.js';
 import { requireTeacher } from '../auth/supabaseAuth.js';
 import { generateReport } from '../report/summary.js';
 import { persistSessionEnd } from '../report/persist.js';
-import { closeRoom, publish, subscribe } from '../state/eventBus.js';
+import { closeRoom, publish, publishToTeachers, subscribe } from '../state/eventBus.js';
 import { answerCatchup, catchupHistory } from '../catchup/answer.js';
 import {
   broadcastWhiteboard,
@@ -65,6 +65,14 @@ import {
 import { getCatchupSlots, bookCatchupSlot, addCustomSlot, cancelCatchupSlot } from '../support/catchupSlots.js';
 import { handleTeachingAssistantRequest } from '../support/teachingAssistant.js';
 import { translateText } from '../support/multilingual.js';
+import {
+  getLibraryBook,
+  getAllBooks,
+  getSessionBooks,
+  addBookToSession,
+  removeBookFromSession,
+  findPageInBook,
+} from '../support/digitalLibrary.js';
 import { think } from '../agent/agentLifecycle.js';
 import {
   activeParticipants,
@@ -99,7 +107,7 @@ const transcriptSchema = z.object({
   uid: z.string(),
   text: z.string(),
   isFinal: z.boolean().default(true),
-  turnId: z.number().optional(),
+  turnId: z.coerce.number().optional(),
   language: z.string().optional(),
   attributionConfidence: z.number().min(0).max(1).optional(),
 });
@@ -513,9 +521,12 @@ export async function classroomRoutes(app: FastifyInstance): Promise<void> {
     if (!participant || participant.leftAt !== undefined) {
       return reply.code(403).send({ error: 'Unknown participant' });
     }
-    if (participant.role !== 'student') {
-      return reply.code(403).send({ error: 'Catch-up chat is for students' });
-    }
+    // Any role may read its own thread. This used to refuse anything but a
+    // student, which left the teacher's panel writing a thread it could never
+    // load: POST stores the teacher's turns and returns them, so the
+    // conversation looked fine until the panel was reopened — at which point
+    // the refusal landed in the client's catch handler and reset the view to
+    // the greeting, discarding a thread the server still had.
     return reply.send({ history: catchupHistory(session, participantId) });
   });
 
@@ -531,6 +542,11 @@ export async function classroomRoutes(app: FastifyInstance): Promise<void> {
     const participant = session.participants.get(participantId);
     if (!participant) {
       return reply.code(403).send({ error: 'Unknown participant' });
+    }
+
+    if (participant.leftAt) {
+      delete participant.leftAt;
+      broadcastParticipantJoined(session, participant.participantId);
     }
 
     // Writing to `reply.raw` bypasses the Fastify reply object, and with it the
@@ -1141,6 +1157,7 @@ export async function classroomRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ ok: true, language: session.language });
   });
 
+
   app.get('/api/sessions/:sessionId/report', async (request, reply) => {
     const session = requireSession(request, reply);
     if (!session) return;
@@ -1172,6 +1189,318 @@ export async function classroomRoutes(app: FastifyInstance): Promise<void> {
 
     const report = await generateReport(session);
     return reply.send(report);
+  });
+
+  // ─── Digital Library Routes ────────────────────────────────────────────────
+
+  app.get('/api/sessions/:sessionId/library', async (request, reply) => {
+    const session = requireSession(request, reply);
+    if (!session) return;
+    const activeBookId = session.library?.activeBookId || 'ncert-7-ch2';
+    const book = getLibraryBook(activeBookId, session.sessionId);
+    const books = getSessionBooks(session.sessionId);
+    return reply.send({
+      library: session.library,
+      book,
+      books,
+    });
+  });
+
+  app.get('/api/sessions/:sessionId/library/books', async (request, reply) => {
+    const session = requireSession(request, reply);
+    if (!session) return;
+    const books = getSessionBooks(session.sessionId);
+    return reply.send({ books });
+  });
+
+  app.post('/api/sessions/:sessionId/library/books', async (request, reply) => {
+    const session = requireSession(request, reply);
+    if (!session) return;
+
+    const schema = z.object({
+      participantId: z.string(),
+      book: z.object({
+        id: z.string(),
+        title: z.string(),
+        subtitle: z.string().optional().default(''),
+        subject: z.string().optional().default('Class Notes'),
+        kind: z.enum(['curriculum', 'pdf', 'pptx', 'text']),
+        pages: z.array(z.any()),
+      }),
+    });
+
+    const parsed = schema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: parsed.error.message });
+    }
+
+    const { participantId, book } = parsed.data;
+    if (!isTeacher(session, participantId)) {
+      return reply.code(403).send({ error: 'Only teachers can add books to the classroom shelf.' });
+    }
+
+    const participant = session.participants.get(participantId);
+    const addedBy = participant?.displayName || 'Teacher';
+
+    const libraryBook = {
+      ...book,
+      subtitle: book.subtitle || 'Classroom Shelf',
+      addedBy,
+      createdAt: new Date().toISOString(),
+    };
+
+    const res = addBookToSession(session.sessionId, libraryBook, 'teacher');
+    if (!res.success) {
+      return reply.code(400).send({ error: res.error });
+    }
+
+    if (session.library) {
+      session.library.activeBookId = libraryBook.id;
+      session.library.currentPage = 0;
+      session.library.lastSequence++;
+    }
+
+    // Broadcast addition to all students via SSE / RTM
+    publish(session.sessionId, {
+      kind: 'echosphere:library-book-added',
+      payload: {
+        bookId: libraryBook.id,
+        book: libraryBook,
+        addedBy,
+      },
+    });
+
+    publish(session.sessionId, {
+      kind: 'echosphere:library-open',
+      payload: {
+        bookId: libraryBook.id,
+        source: 'teacher',
+      },
+    });
+
+    if (session.library) {
+      publish(session.sessionId, {
+        kind: 'echosphere:library-state',
+        state: session.library,
+      });
+    }
+
+    return reply.send({ ok: true, book: libraryBook, state: session.library });
+  });
+
+  app.delete('/api/sessions/:sessionId/library/books/:bookId', async (request, reply) => {
+    const session = requireSession(request, reply);
+    if (!session) return;
+
+    const { bookId } = request.params as { bookId: string };
+    const { participantId } = z.object({ participantId: z.string() }).parse(request.query);
+
+    if (!isTeacher(session, participantId)) {
+      return reply.code(403).send({ error: 'Only teachers can remove books from the classroom shelf.' });
+    }
+
+    const res = removeBookFromSession(session.sessionId, bookId, 'teacher');
+    if (!res.success) {
+      return reply.code(400).send({ error: res.error });
+    }
+
+    const participant = session.participants.get(participantId);
+    const removedBy = participant?.displayName || 'Teacher';
+
+    publish(session.sessionId, {
+      kind: 'echosphere:library-book-removed',
+      payload: {
+        bookId,
+        removedBy,
+      },
+    });
+
+    return reply.send({ ok: true });
+  });
+
+  app.post('/api/sessions/:sessionId/library/open', async (request, reply) => {
+    const session = requireSession(request, reply);
+    if (!session) return;
+
+    const schema = z.object({
+      bookId: z.string(),
+      participantId: z.string().optional(),
+    });
+    const { bookId, participantId } = schema.parse(request.body);
+
+    const isTeacherUser = participantId ? isTeacher(session, participantId) : true;
+    if (session.library) {
+      session.library.activeBookId = bookId;
+      session.library.currentPage = 0;
+      session.library.lastSequence++;
+    }
+
+    if (isTeacherUser) {
+      publish(session.sessionId, {
+        kind: 'echosphere:library-open',
+        payload: {
+          bookId,
+          source: 'teacher',
+        },
+      });
+      publish(session.sessionId, {
+        kind: 'echosphere:library-state',
+        state: session.library!,
+      });
+    }
+
+    return reply.send({ ok: true, state: session.library });
+  });
+
+  app.post('/api/sessions/:sessionId/library/turn', async (request, reply) => {
+    const session = requireSession(request, reply);
+    if (!session) return;
+
+    const schema = z.object({
+      page: z.number().int().min(0),
+      bookId: z.string().optional(),
+      participantId: z.string().optional(),
+      glow: z.boolean().optional(),
+    });
+    const { page, bookId, participantId, glow } = schema.parse(request.body);
+
+    const isTeacherUser = participantId ? isTeacher(session, participantId) : true;
+    const targetBookId = bookId || session.library?.activeBookId || 'ncert-7-ch2';
+
+    // If locked to teacher, non-teachers CANNOT turn the classroom page
+    if (session.library?.isLocked && !isTeacherUser) {
+      return reply.code(403).send({ error: 'Textbook is locked to teacher' });
+    }
+
+    if (isTeacherUser) {
+      // Teacher turns the whole class page
+      if (session.library) {
+        if (bookId) session.library.activeBookId = bookId;
+        session.library.currentPage = page;
+        session.library.lastSequence++;
+        if (glow) {
+          session.library.glowPage = page;
+        }
+      }
+
+      const seq = session.library?.lastSequence || Date.now();
+
+      publish(session.sessionId, {
+        kind: 'echosphere:library-page',
+        payload: {
+          bookId: targetBookId,
+          page,
+          seq,
+          source: 'teacher',
+          glow,
+        },
+      });
+    } else {
+      // Student is in Free Read mode (isLocked is false):
+      // Record student's current reading page and notify the teacher
+      const participant = participantId ? session.participants.get(participantId) : undefined;
+      const displayName = participant?.displayName || 'Student';
+      const studentPos = {
+        participantId: participantId || 'unknown',
+        displayName,
+        page,
+        bookId: targetBookId,
+        updatedAt: Date.now(),
+      };
+
+      if (!session.library.studentPositions) {
+        session.library.studentPositions = {};
+      }
+      if (participantId) {
+        session.library.studentPositions[participantId] = studentPos;
+      }
+
+      publishToTeachers(session.sessionId, {
+        kind: 'echosphere:library-student-position',
+        position: studentPos,
+      });
+    }
+
+    return reply.send({ ok: true, state: session.library });
+  });
+
+  app.post('/api/sessions/:sessionId/library/lock', async (request, reply) => {
+    const session = requireSession(request, reply);
+    if (!session) return;
+
+    const schema = z.object({
+      locked: z.boolean(),
+      participantId: z.string().optional(),
+    });
+    const { locked, participantId } = schema.parse(request.body);
+
+    if (participantId && !isTeacher(session, participantId)) {
+      return reply.code(403).send({ error: 'Only teachers can change library lock status' });
+    }
+
+    if (session.library) {
+      session.library.isLocked = locked;
+      session.library.lastSequence++;
+    }
+
+    publish(session.sessionId, {
+      kind: 'echosphere:library-lock',
+      payload: { locked },
+    });
+
+    // If locked back to teacher, broadcast current teacher page to bring all students back
+    if (locked && session.library) {
+      publish(session.sessionId, {
+        kind: 'echosphere:library-page',
+        payload: {
+          bookId: session.library.activeBookId,
+          page: session.library.currentPage,
+          seq: session.library.lastSequence,
+          source: 'teacher',
+        },
+      });
+    }
+
+    return reply.send({ ok: true, isLocked: locked, state: session.library });
+  });
+
+  app.post('/api/sessions/:sessionId/library/present', async (request, reply) => {
+    const session = requireSession(request, reply);
+    if (!session) return;
+
+    const schema = z.object({
+      presenting: z.boolean(),
+      participantId: z.string().optional(),
+    });
+    const { presenting, participantId } = schema.parse(request.body);
+
+    if (session.library) {
+      session.library.isPresenting = presenting;
+      session.library.presenterId = presenting ? participantId || 'teacher' : null;
+    }
+
+    publish(session.sessionId, {
+      kind: 'echosphere:library-present',
+      payload: {
+        presenting,
+        presenterId: session.library?.presenterId || null,
+      },
+    });
+
+    return reply.send({ ok: true, isPresenting: presenting });
+  });
+
+  app.get('/api/sessions/:sessionId/library/search', async (request, reply) => {
+    const session = requireSession(request, reply);
+    if (!session) return;
+
+    const { q, bookId } = request.query as { q?: string; bookId?: string };
+    if (!q) {
+      return reply.code(400).send({ error: 'Missing search query q' });
+    }
+    const targetBookId = bookId || session.library?.activeBookId || 'ncert-7-ch2';
+    const result = findPageInBook(targetBookId, q, session.sessionId);
+    return reply.send({ result });
   });
 
   app.delete('/api/sessions/:sessionId', async (request, reply) => {
@@ -1236,6 +1565,7 @@ function roomState(session: ClassroomSession): RoomState {
     catchupSlots: getCatchupSlots(session),
     raisedHands: Array.from(session.raisedHands),
     whiteboard: publicWhiteboard(session),
+    library: session.library,
     screenShareAllowed: Array.from(session.screenShareAllowed),
     activeScreenShare: session.activeScreenShare,
     activeModel: session.activeModel,

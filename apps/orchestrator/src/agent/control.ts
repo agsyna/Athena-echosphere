@@ -49,6 +49,13 @@ export interface BoardControl {
   text?: string;
 }
 
+export interface LibraryControl {
+  action: 'open' | 'find';
+  bookId?: string;
+  page?: number;
+  query?: string;
+}
+
 export interface CoTeacherControl {
   /** Display name of the student being answered this turn (§3.5, §3.9). */
   to?: string;
@@ -56,6 +63,7 @@ export interface CoTeacherControl {
   quiz?: QuizControl;
   board?: BoardControl;
   illustrate?: IllustrateControl;
+  library?: LibraryControl;
 }
 
 export interface ParsedTurn {
@@ -158,6 +166,16 @@ function readGap(value: unknown): GapControl | undefined {
   return { topic: v.topic, students };
 }
 
+function readLibrary(value: unknown): LibraryControl | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const v = value as Record<string, unknown>;
+  if (v.action !== 'open' && v.action !== 'find') return undefined;
+  const bookId = typeof v.bookId === 'string' ? v.bookId.trim() : undefined;
+  const page = typeof v.page === 'number' && Number.isInteger(v.page) && v.page >= 0 ? v.page : undefined;
+  const query = typeof v.query === 'string' ? v.query.trim() : undefined;
+  return { action: v.action, bookId, page, query };
+}
+
 /**
  * Splits an agent turn into its spoken part and its control payload.
  *
@@ -184,6 +202,8 @@ export function parseAgentTurn(text: string): ParsedTurn {
   if (board) control.board = board;
   const illustrate = readIllustrate(raw.illustrate);
   if (illustrate) control.illustrate = illustrate;
+  const library = readLibrary(raw.library);
+  if (library) control.library = library;
 
   const spoken = (text.slice(0, span.start) + text.slice(span.end))
     .replace(/\s{2,}/g, ' ')

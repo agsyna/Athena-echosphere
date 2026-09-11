@@ -25,6 +25,7 @@ import { modelResolution, stopAllAgents } from './agent/agentLifecycle.js';
 const TICK_INTERVAL_MS = 1000;
 
 const app = Fastify({
+  bodyLimit: 100 * 1024 * 1024, // 100MB to support PDF, PPTX, and rich courseware uploads
   logger: {
     level: process.env.LOG_LEVEL ?? 'info',
     transport:
@@ -57,6 +58,7 @@ app.get('/health', async () => {
   return {
     ok: true,
     sessions: listSessions().length,
+    llmVendor: model.vendor,
     modelConfigured: model.configured,
     modelResolved: model.resolved,
     modelSupported: model.supported,
@@ -104,7 +106,10 @@ if (!startupModel.supported) {
       `configured model. Supported: gpt-4o-mini, gpt-4.1-mini, gpt-5-nano, gpt-5-mini.`,
   );
 } else {
-  app.log.info({ model: startupModel.resolved }, 'LLM model resolved');
+  app.log.info(
+    { vendor: startupModel.vendor, model: startupModel.resolved },
+    'LLM model resolved',
+  );
 }
 
 await app.listen({ port: config.port, host: config.host });

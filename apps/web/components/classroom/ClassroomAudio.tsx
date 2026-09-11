@@ -126,6 +126,15 @@ type ToolkitItem = TranscriptHelperItem<
   Partial<UserTranscription | AgentTranscription>
 >;
 
+function normalizeTurnId(turnId: unknown): number | undefined {
+  if (typeof turnId === 'number' && Number.isFinite(turnId)) return turnId;
+  if (typeof turnId === 'string' && turnId.trim().length > 0) {
+    const parsed = Number(turnId);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+}
+
 /**
  * `AgoraVoiceAI` is a process-wide singleton, which makes naive per-mount
  * teardown actively destructive: `init()` hands every caller the same object,
@@ -390,7 +399,7 @@ export function ClassroomAudio({
       {
         text: string;
         speakerUid: string;
-        turnId: number;
+        turnId: number | undefined;
         /** Undefined for the agent's own turns — there is nothing to guess there. */
         attributionConfidence: number | undefined;
         /** When this turn was last published, for the max-hold ceiling. */
@@ -464,7 +473,12 @@ export function ClassroomAudio({
           turnId: entry.turnId,
           attributionConfidence: entry.attributionConfidence,
         })
-        .catch(() => undefined);
+        .catch((error) => {
+          console.warn('[classroom] transcript relay failed:', error);
+          onToolkitError?.(
+            error instanceof Error ? error.message : 'Transcript relay failed',
+          );
+        });
     };
 
     const onTranscript = (items: ToolkitItem[]) => {
@@ -483,13 +497,16 @@ export function ClassroomAudio({
         const isAgent =
           item.metadata?.object === MessageType.AGENT_TRANSCRIPTION ||
           String(item.uid) === agentUid;
-        const turnId = item.turn_id;
+        const turnId = normalizeTurnId(item.turn_id);
+        if (turnId === undefined) {
+          console.warn('[classroom] transcript item missing numeric turn_id', item);
+        }
         // The agent and a human can share a turn_id: a turn started by an
         // injected instruction holds both that instruction and her reply. Keyed
         // on turn_id alone they collided, and because the speaker is fixed at
         // first sight, her answer inherited the instruction's attribution and
         // was logged as the teacher speaking.
-        const key = `${turnId}:${isAgent ? 'agent' : 'human'}`;
+        const key = `${turnId ?? `${item.uid}:${text}`}:${isAgent ? 'agent' : 'human'}`;
         const existing = pendingTurnsRef.current.get(key);
 
         if (existing && existing.text === text) continue;
@@ -507,7 +524,13 @@ export function ClassroomAudio({
 
         // A newer turn means every earlier one is definitively finished.
         for (const [otherKey, otherEntry] of pendingTurnsRef.current) {
-          if (otherEntry.turnId < turnId) flushTurn(otherKey);
+          if (
+            otherEntry.turnId !== undefined &&
+            turnId !== undefined &&
+            otherEntry.turnId < turnId
+          ) {
+            flushTurn(otherKey);
+          }
         }
 
         pendingTurnsRef.current.set(key, {
