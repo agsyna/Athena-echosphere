@@ -378,6 +378,22 @@ export default function TeacherDashboardPage() {
     if (identity) void view.toggleScreenShare(false).catch(() => undefined);
   }, [identity, view]);
 
+  // `showLibraryStage` is local to this tab; `presentLibrary` is what puts the
+  // book on every student's stage (their stage is gated on
+  // `library.isPresenting`). Opening the modal without the second call is what
+  // silently desynced the library: the teacher saw a book nobody else did, and
+  // with no student ever on a page the Free Read "Jump to reader" chips had
+  // nothing to list. Both toggles go through these so the two cannot drift.
+  const openLibraryStage = useCallback(() => {
+    setShowLibraryStage(true);
+    void view.presentLibrary(true);
+  }, [view]);
+
+  const closeLibraryStage = useCallback(() => {
+    setShowLibraryStage(false);
+    void view.presentLibrary(false);
+  }, [view]);
+
   if (!identity) {
     return (
       <main className="eco-room flex min-h-screen items-center justify-center p-6 text-sm text-[var(--eco-cream-dim)]">
@@ -953,7 +969,13 @@ export default function TeacherDashboardPage() {
                     <div className="eco-panel relative min-h-0 flex-1 overflow-hidden">
                       <Model3DStage modelId={view.activeModel.modelId} />
                     </div>
-                  ) : view.library?.isPresenting && view.libraryBook ? (
+                  ) : view.library?.isPresenting && view.libraryBook && !showLibraryStage ? (
+                    /* `!showLibraryStage` keeps this from double-mounting behind
+                       the teacher's own modal, now that opening that modal is
+                       what sets `isPresenting`. Two FlipBooks would mean two
+                       page-flip engines and a duplicated `id="book"`. This
+                       branch still covers the case it was written for: Athena
+                       citing a page presents the library with no modal open. */
                     <DigitalLibraryStage
                       sessionId={sessionId}
                       participantId={identity.participantId}
@@ -967,7 +989,7 @@ export default function TeacherDashboardPage() {
                                   onSelectBook={view.selectLibraryBook}
                       onAddBook={view.addLibraryBook}
                       onRemoveBook={view.removeLibraryBook}
-                      onCloseStage={() => void view.presentLibrary(false)}
+                      onCloseStage={closeLibraryStage}
                     />
                   ) : (
                     <ParticipantGrid
@@ -1038,7 +1060,7 @@ export default function TeacherDashboardPage() {
         }}
         onOpenQuiz={() => setActiveToolPanel('quiz')}
         onOpenGaps={() => setActiveToolPanel('gaps')}
-        onOpenLibrary={() => setShowLibraryStage(true)}
+        onOpenLibrary={openLibraryStage}
       />
 
       {activeToolPanel && (
@@ -1099,7 +1121,7 @@ export default function TeacherDashboardPage() {
         <div
           className="fixed inset-0 z-40 flex items-center justify-center p-4"
           style={{ background: 'color-mix(in srgb, var(--eco-ink) 65%, transparent)' }}
-          onClick={() => setShowLibraryStage(false)}
+          onClick={closeLibraryStage}
         >
           <div
             className="flex h-[85vh] w-full max-w-6xl flex-col"
@@ -1119,7 +1141,7 @@ export default function TeacherDashboardPage() {
                 onSelectBook={view.selectLibraryBook}
                 onAddBook={view.addLibraryBook}
                 onRemoveBook={view.removeLibraryBook}
-                onCloseStage={() => setShowLibraryStage(false)}
+                onCloseStage={closeLibraryStage}
               />
             ) : (
               <div className="eco-panel flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
