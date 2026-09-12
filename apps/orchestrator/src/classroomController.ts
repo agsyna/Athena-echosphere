@@ -598,6 +598,37 @@ function isSystemDirective(text: string): boolean {
   return text.trimStart().startsWith(SYSTEM_PREFIX);
 }
 
+/**
+ * Why a transcript turn was discarded.
+ *
+ * Six guards in `ingestTranscript` drop a turn and return. None of them logged,
+ * and the route replies `{ok:true}` either way — so a dropped turn was
+ * indistinguishable from a stored one both from the browser AND from the server
+ * logs, which is why "the student spoke and nothing happened" could never be
+ * attributed to anything. Naming them changes no behaviour; it only makes the
+ * existing behaviour observable.
+ */
+type TranscriptDropReason =
+  | 'unchanged'
+  | 'duplicate'
+  | 'system-directive'
+  | 'unknown-uid'
+  | 'not-final'
+  | 'self-echo';
+
+function dropTranscript(
+  session: ClassroomSession,
+  reason: TranscriptDropReason,
+  uid: string,
+  text: string,
+  turnId?: number,
+): void {
+  console.info(
+    `[transcript] drop reason=${reason} session=${session.sessionId} ` +
+      `uid=${uid} turn=${turnId ?? '-'} text=${JSON.stringify(text.slice(0, 60))}`,
+  );
+}
+
 export async function ingestTranscript(
   session: ClassroomSession,
   { uid, text, isFinal, turnId, language, attributionConfidence }: IngestOptions,
@@ -621,7 +652,10 @@ export async function ingestTranscript(
   // instruction text.
   if (isFinal && turnId !== undefined && !systemDirective) {
     const outcome = upsertByTurn(session, uid, text, turnId);
-    if (outcome === 'unchanged') return;
+    if (outcome === 'unchanged') {
+      dropTranscript(session, 'unchanged', uid, text, turnId);
+      return;
+    }
     if (outcome === 'updated') {
       // The stored segment was rewritten in place; re-publish so clients that
       // already rendered the fragment replace it rather than showing both.
@@ -636,6 +670,7 @@ export async function ingestTranscript(
       alreadyStored = true;
     }
   } else if (isFinal && isDuplicateSegment(session, uid, text, turnId)) {
+    dropTranscript(session, 'duplicate', uid, text, turnId);
     return;
   }
 
@@ -673,10 +708,21 @@ export async function ingestTranscript(
   // logging them would put "[classroom:system] The teacher has asked you to…"
   // in front of the students and feed it to the gap detector as a confused
   // question.
-  if (systemDirective) return;
+  if (systemDirective) {
+    dropTranscript(session, 'system-directive', uid, text, turnId);
+    return;
+  }
 
   const participant = participantByUid(session, uid);
-  if (!participant) return; // Unknown uid — not a registered classroom member.
+  if (!participant) {
+    // Unknown uid — not a registered classroom member. Also fires in bulk after
+    // an orchestrator restart: sessions live in an in-memory Map, so a restart
+    // wipes `uidToParticipantId` and every relayed turn lands here while the
+    // room still looks perfectly connected. A burst of these means check the
+    // deploy timestamps before debugging anything else.
+    dropTranscript(session, 'unknown-uid', uid, text, turnId);
+    return;
+  }
 
   // Whether the agent was mid-utterance when this segment arrived, captured
   // before the transition below overwrites it: a student's own speech moves the
@@ -720,7 +766,10 @@ export async function ingestTranscript(
   }
   broadcastFloor(session);
 
-  if (!isFinal) return;
+  if (!isFinal) {
+    dropTranscript(session, 'not-final', uid, text, turnId);
+    return;
+  }
 
   // Athena's own TTS, played out of a shared speaker, can be picked up by
   // anyone's open mic and come back looking exactly like a human turn — most
@@ -729,7 +778,10 @@ export async function ingestTranscript(
   // any of it is stored or analysed, so an echo can neither pollute the
   // transcript nor coincidentally contain her own name and make her answer
   // herself.
-  const spokenText = stripSelfEcho(session, text);
+  // `agentWasSpeaking` keeps the aggressive whole-turn drop for the case it was
+  // built for — her voice leaking into an open mic while she is actually
+  // talking — without it eating short student answers spoken into a quiet room.
+  const spokenText = stripSelfEcho(session, text, now, agentWasSpeaking);
   if (spokenText.length === 0) {
     // Except when the discarded turn was somebody answering the quiz. Athena
     // reads all four options aloud, so "Option B" is a literal substring of her
@@ -740,6 +792,7 @@ export async function ingestTranscript(
     // like it did nothing.
     maybeRescueSpokenQuizAnswer(session, participant, text, agentWasSpeaking);
     broadcastFloor(session);
+    dropTranscript(session, 'self-echo', uid, text, turnId);
     return;
   }
 
@@ -761,6 +814,14 @@ export async function ingestTranscript(
       attributionConfidence,
     });
     publish(session.sessionId, { kind: 'echosphere:transcript', segment });
+    // The counterpart to `dropTranscript`. Without a kept-line to compare
+    // against, a log full of drops cannot be read as "most turns land, these
+    // six did not" versus "nothing is landing at all".
+    console.info(
+      `[transcript] keep session=${session.sessionId} uid=${uid} ` +
+        `turn=${turnId ?? '-'} speaker=${participant.role} ` +
+        `conf=${attributionConfidence ?? '-'}`,
+    );
   }
 
   session.floor = onHumanSpeechEnd(session.floor, now);
@@ -973,6 +1034,32 @@ const QUIZ_REDELIVERY_WINDOW_MS = 90_000;
  * two paths carry different identity: the history poll has no turn id at all,
  * and the relay's is the browser's. The text is the only thing they share.
  */
+/**
+ * Records a freshly issued quiz against the running set, whichever delivery
+ * path produced it.
+ *
+ * This used to happen only inside `issueSetQuestion`, on the history-poll path.
+ * But the same payload also arrives through the RTM relay, and when the relay
+ * won the race the card went up, the class answered it, and the set held no
+ * record of it — so `maybeAdvanceQuizSet` refused to advance and every quiz set
+ * silently stopped at its first question. Confirmed in production: two
+ * `(no turn)` poll failures, a working quiz on screen, and no `advancing` line.
+ *
+ * Idempotent, because both paths call it for the same quiz and either may
+ * arrive first.
+ */
+export function recordQuizInSet(session: ClassroomSession, quiz: QuizQuestion): void {
+  const set = session.activeQuizSet;
+  if (!set) return;
+  if (set.quizIds.includes(quiz.quizId)) return;
+  set.quizIds.push(quiz.quizId);
+  set.askedQuestions.push(quiz.question);
+  if (set.total > 1) {
+    quiz.setIndex = set.asked;
+    quiz.setTotal = set.total;
+  }
+}
+
 export function findRecentQuizByPayload(
   session: ClassroomSession,
   incoming: { question: string; options?: string[] },
@@ -1272,6 +1359,9 @@ export function applyControl(
     // every quiz set at its first question.
     const alreadyIssued = findRecentQuizByPayload(session, control.quiz);
     if (alreadyIssued) {
+      // The other delivery path got here first. Record it against the set from
+      // here too, so advancement no longer depends on which path won.
+      recordQuizInSet(session, alreadyIssued);
       return { quiz: alreadyIssued };
     }
     const pending = takePendingQuiz(session);
@@ -1288,6 +1378,9 @@ export function applyControl(
     }
     broadcastQuiz(session, quiz);
     scheduleQuizClose(session, quiz.quizId, quiz.deadline);
+    // This path got here first — the relay, most often. Same recording either
+    // way, so the set advances whether or not the history poll ever answers.
+    recordQuizInSet(session, quiz);
     return { quiz };
   }
 
@@ -1656,10 +1749,43 @@ export async function startQuiz(
 async function issueSetQuestion(
   session: ClassroomSession,
   attempt = 1,
+  /**
+   * The set this call is for.
+   *
+   * Captured by the caller rather than re-read from the session, so a retry
+   * cannot silently switch to a DIFFERENT set the teacher started while it was
+   * in flight — which is how a retry for a photosynthesis quiz ended up issuing
+   * an alphabet one, with two concurrent issuances then racing for the same
+   * history turn.
+   */
+  forSet: ClassroomSession['activeQuizSet'] = session.activeQuizSet,
 ): Promise<boolean> {
-  const set = session.activeQuizSet;
-  if (!set) return false;
+  const set = forSet;
+  if (!set || session.activeQuizSet !== set) return false;
 
+  // Two concurrent issuances share one `session.pendingQuiz` slot and race for
+  // the same history turn; the loser then tore down the set the winner had just
+  // filled. Released before the retry below recurses, so a retry is not
+  // mistaken for a competing caller.
+  if (set.issuing) {
+    console.warn(
+      `[quiz] issueSetQuestion re-entered while in flight in session ${session.sessionId} — ignoring`,
+    );
+    return true;
+  }
+  set.issuing = true;
+  try {
+    return await issueSetQuestionInner(session, set, attempt);
+  } finally {
+    set.issuing = false;
+  }
+}
+
+async function issueSetQuestionInner(
+  session: ClassroomSession,
+  set: NonNullable<ClassroomSession['activeQuizSet']>,
+  attempt: number,
+): Promise<boolean> {
   // A permit for THIS question. QUIZ_DELIVERY bypasses the floor state, so a
   // retry or an advance while the previous turn is still winding down is fine;
   // it only fails on a mute or a disabled topic.
@@ -1706,16 +1832,35 @@ async function issueSetQuestion(
     );
     session.pendingQuiz = null;
     if (attempt < 2 && session.activeQuizSet === set) {
-      return issueSetQuestion(session, attempt + 1);
+      // Hand the flag over to the retry rather than letting it see itself as a
+      // competing caller. Reassigned synchronously before the call, and the
+      // retry claims it again synchronously at its own top, so there is no
+      // window for a genuine second caller to slip through.
+      set.issuing = false;
+      return issueSetQuestion(session, attempt + 1, set);
     }
-    // Give up on this question. Close the set cleanly rather than hang.
-    if (session.activeQuizSet === set) {
+
+    // Give up on this QUESTION — but not on a set that has already delivered
+    // it. `think()` succeeded, so the question may well have been asked and
+    // landed via the relay path while this poll was failing. Tearing the set
+    // down here is what turned a recoverable poll failure into a silently
+    // truncated quiz: the card was on screen, the class answered it, and the
+    // set had already been nulled.
+    const deliveredAnyway =
+      session.activeQuizSet === set && set.quizIds.length >= set.asked;
+
+    if (!deliveredAnyway && session.activeQuizSet === set) {
       session.activeQuizSet = null;
       publishToTeachers(session.sessionId, {
         kind: 'echosphere:agent-blocked',
-        reason: 'SILENCE_GAP_TOO_SHORT',
+        reason: 'QUIZ_PAYLOAD_MISSING',
         at: Date.now(),
       });
+    } else if (deliveredAnyway) {
+      console.info(
+        `[quiz] poll found no payload but the set already holds question ${set.asked} ` +
+          `in session ${session.sessionId} — keeping the set alive`,
+      );
     }
     clearSpeakPermit(session);
     releaseFloor(session);
@@ -1724,11 +1869,14 @@ async function issueSetQuestion(
 
   if (session.activeQuizSet !== set) return true; // cancelled mid-flight
   console.info(`[quiz] payload recovered from agent history in session ${session.sessionId}`);
+  // `applyControl` records the quiz against the set itself now, via
+  // `recordQuizInSet`, so both delivery paths land it. Called again here rather
+  // than dropped: keeping both callers is what stops a future change to one
+  // path silently capping the set again. Idempotent, so the repeat is free —
+  // the raw `quizIds.push` this replaces was NOT, and would have double-counted
+  // every question against `set.total`.
   const { quiz } = applyControl(session, control);
-  if (quiz) {
-    set.quizIds.push(quiz.quizId);
-    set.askedQuestions.push(quiz.question);
-  }
+  if (quiz) recordQuizInSet(session, quiz);
   return true;
 }
 

@@ -582,10 +582,28 @@ async function assistantTurns(
   agentSession: AgentSession,
 ): Promise<string[]> {
   const history = (await agentSession.getHistory()) as { contents?: HistoryItem[] };
-  return (history.contents ?? [])
+  const contents = history.contents ?? [];
+  const turns = contents
     .filter((c) => c.role === 'assistant' && typeof c.content === 'string')
     .map((c) => c.content as string)
     .filter((t) => t.trim().length > 0);
+
+  // Distinguishes the four ways this comes back useless: the endpoint threw
+  // (caught by the caller), `contents` absent, `contents` present with no
+  // assistant role, or assistant entries whose content is not a string. All
+  // four previously collapsed into the same empty array and the same
+  // "(no turn)" log line, which is what made a dead quiz set indistinguishable
+  // from a quiet one.
+  if (turns.length === 0) {
+    console.info(
+      `[quiz] history: ${contents.length} entries, 0 usable assistant turns` +
+        (contents.length > 0
+          ? ` (roles=${[...new Set(contents.map((c) => c.role))].join(',')}` +
+            ` contentTypes=${[...new Set(contents.map((c) => typeof c.content))].join(',')})`
+          : ' (contents absent or empty)'),
+    );
+  }
+  return turns;
 }
 
 /** Snapshot of the assistant turns already in history — pass to pollForPayloadTurn. */
@@ -594,7 +612,11 @@ export async function assistantTurnSnapshot(sessionId: string): Promise<Set<stri
   if (!agentSession || agentSession.status !== 'running') return new Set();
   try {
     return new Set(await assistantTurns(agentSession));
-  } catch {
+  } catch (error) {
+    console.warn(
+      `[quiz] getHistory failed taking the pre-turn snapshot in session ${sessionId}:`,
+      error,
+    );
     return new Set();
   }
 }
@@ -637,6 +659,7 @@ export async function pollForPayloadTurn(
   const { timeoutMs = 25_000, intervalMs = 1_500 } = options;
   const deadline = Date.now() + timeoutMs;
   let newestSeen: string | null = null;
+  let loggedPollError = false;
 
   while (Date.now() < deadline) {
     try {
@@ -648,8 +671,20 @@ export async function pollForPayloadTurn(
         newestSeen = newestSeen ?? t;
         if (hasCompletePayload(t)) return t;
       }
-    } catch {
-      // The history endpoint 404s briefly right after start / between turns.
+    } catch (error) {
+      // The history endpoint 404s briefly right after start / between turns, so
+      // this stays non-fatal — but it must not stay invisible. A persistent
+      // failure here is indistinguishable from "the agent said nothing", which
+      // is what made a dead quiz set look like a quiet one. Logged once per
+      // poll rather than per tick, or 16 iterations would bury the log.
+      if (!loggedPollError) {
+        loggedPollError = true;
+        console.warn(
+          `[quiz] getHistory failed during payload poll for session ${sessionId} ` +
+            `(further errors this poll suppressed):`,
+          error,
+        );
+      }
     }
     await new Promise((r) => setTimeout(r, intervalMs));
   }

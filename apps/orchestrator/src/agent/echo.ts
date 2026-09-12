@@ -31,6 +31,23 @@ const ECHO_WINDOW_MS = 10_000;
 /** Below this, a string is too short to match reliably — treat it as real speech. */
 const MIN_MATCH_LENGTH = 6;
 
+/**
+ * Below this, discarding an ENTIRE turn as echo is not safe.
+ *
+ * `MIN_MATCH_LENGTH` governs whether a string is worth comparing at all. This
+ * governs the much stronger claim that a turn is *entirely* Athena's voice and
+ * should be thrown away. Six characters of overlap is "yes", "four",
+ * "option b", "a common denominator" — the exact shape of a student answering a
+ * question, and every one of those is a literal substring of something she said
+ * moments earlier. Six of nine realistic student answers were being destroyed
+ * this way, and because the drop happens before the wake-phrase check, she did
+ * not hear them either.
+ *
+ * A partial cut is still allowed below this length; only the all-or-nothing
+ * drop is gated.
+ */
+const MIN_WHOLE_TURN_DROP_LENGTH = 25;
+
 /** Trigram similarity above this counts as the same utterance, ASR noise and all. */
 const FUZZY_MATCH_THRESHOLD = 0.6;
 
@@ -61,7 +78,14 @@ function trigramSimilarity(a: string, b: string): number {
   if (setA.size === 0 || setB.size === 0) return 0;
   let shared = 0;
   for (const g of setA) if (setB.has(g)) shared += 1;
-  return shared / Math.min(setA.size, setB.size);
+  // Union, not min. Dividing by the SMALLER set makes this a containment ratio
+  // rather than a similarity: every trigram of a four-word student answer can
+  // appear somewhere in a long agent sentence and score a clean 1.0, which is
+  // how "the answer is four" was classified as Athena's own voice. Jaccard
+  // requires the two utterances to be comparable in SIZE as well as
+  // overlapping, which is what "this is the same sentence" actually means. A
+  // genuine echo still scores near 1.0, so FUZZY_MATCH_THRESHOLD is unchanged.
+  return shared / (setA.size + setB.size - shared);
 }
 
 /**
@@ -132,6 +156,20 @@ export function stripSelfEcho(
   session: ClassroomSession,
   transcript: string,
   now: number = Date.now(),
+  /**
+   * Whether the agent's audio was actually playing into the room when this turn
+   * arrived.
+   *
+   * When it was, a short turn matching her words is far more likely to be her
+   * own voice through an open mic than a student speaking — most sharply while
+   * she reads four quiz options aloud, where "Option B five" is literally her
+   * sentence. So the whole-turn drop stays aggressive there.
+   *
+   * When it was not, that same short turn is the ordinary shape of a student
+   * answering a question, and dropping it is the bug
+   * MIN_WHOLE_TURN_DROP_LENGTH exists to stop.
+   */
+  agentSpeaking = false,
 ): string {
   const raw = transcript.trim();
   if (!raw) return '';
@@ -148,15 +186,29 @@ export function stripSelfEcho(
     const normKept = normalise(kept);
     if (normKept.length === 0) return '';
 
+    // Only a substantial turn may be discarded outright as echo; see
+    // MIN_WHOLE_TURN_DROP_LENGTH. A short one is far more likely to be a
+    // student answering in her vocabulary than her own voice coming back.
+    const dropWholeTurnAllowed =
+      agentSpeaking || normKept.length >= MIN_WHOLE_TURN_DROP_LENGTH;
+
     // Whole-turn match: nothing left but echo, or the echo swallows the turn.
-    if (a.includes(normKept)) return '';
+    if (a.includes(normKept)) {
+      if (dropWholeTurnAllowed) return '';
+      continue;
+    }
     if (normKept.includes(a)) {
       kept = cutSpan(kept, a);
       continue;
     }
     // Fuzzy whole-turn match: ASR mangled the echo enough that no exact span
     // exists, so there is nothing left to salvage either.
-    if (trigramSimilarity(a, normKept) > FUZZY_MATCH_THRESHOLD) return '';
+    if (
+      dropWholeTurnAllowed &&
+      trigramSimilarity(a, normKept) > FUZZY_MATCH_THRESHOLD
+    ) {
+      return '';
+    }
   }
 
   // Punctuation debris left behind where a matched span used to be.

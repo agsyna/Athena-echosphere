@@ -222,6 +222,15 @@ export interface ClassroomSession {
     quizIds: string[];
     /** Question text already asked, so the agent varies the next one. */
     askedQuestions: string[];
+    /**
+     * True while `issueSetQuestion` is mid-flight for this set.
+     *
+     * Two concurrent issuances share one `session.pendingQuiz` slot and race
+     * for the same history turn; the loser then tore down the set the winner
+     * had just filled. A retry colliding with a freshly pressed Start Quiz is
+     * the realistic way in.
+     */
+    issuing?: boolean;
   } | null;
 
   transcript: TranscriptSegment[];

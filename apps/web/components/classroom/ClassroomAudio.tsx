@@ -80,6 +80,13 @@ export interface ClassroomAudioProps {
    * either way; this just lets the page explain why.
    */
   onMicError?: (message: string) => void;
+  /**
+   * Fires on the relay client when this tab is hidden or shown again.
+   *
+   * Only meaningful when `isRelay` — see the effect below for why a hidden tab
+   * stops the room's transcript.
+   */
+  onRelayHiddenChange?: (hidden: boolean) => void;
 }
 
 /** A human-readable reason for `useLocalMicrophoneTrack`'s error, if any. */
@@ -226,6 +233,7 @@ export function ClassroomAudio({
   onToolkitReady,
   onToolkitError,
   onMicError,
+  onRelayHiddenChange,
 }: ClassroomAudioProps) {
   const client = useRTCClient();
   const remoteUsers = useRemoteUsers();
@@ -298,6 +306,17 @@ export function ClassroomAudio({
   const dominantSpeakerRef = useRef<string | null>(null);
   const attributionConfidenceRef = useRef<number>(1);
   const lastSpeakingUidRef = useRef<string | null>(null);
+  /** Guards the one-time payload-shape probe in `onTranscript`. */
+  const loggedTranscriptShape = useRef(false);
+
+  /**
+   * Drains every pending turn immediately.
+   *
+   * Populated by the transcript effect below so the visibility handler can
+   * flush before this tab's timers are throttled, without either effect
+   * depending on the other's lifecycle.
+   */
+  const flushPendingTurnsRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!joinSuccess) return;
@@ -364,6 +383,34 @@ export function ClassroomAudio({
 
     return () => window.clearInterval(id);
   }, [joinSuccess, remoteUsers, agentUid, uid, localMicrophoneTrack, onSpeakingChange]);
+
+  /**
+   * Reports when the relaying tab goes into the background.
+   *
+   * Relaying runs on `setTimeout` (the turn settle and max-hold below) and a
+   * 150ms `setInterval` (the attribution poll above). Chrome clamps both to
+   * >=1s in a hidden tab, and to once per MINUTE after five minutes hidden. So
+   * a backgrounded teacher tab freezes the transcript for the ENTIRE room and
+   * lets attribution go stale — silently, because every other signal (RTC, RTM,
+   * SSE) stays perfectly healthy and nothing anywhere reports an error.
+   *
+   * Reported rather than worked around: there is no way to run this reliably in
+   * a hidden tab. Pending turns are flushed on the way out so whatever was
+   * mid-sentence still lands.
+   */
+  useEffect(() => {
+    if (!isRelay) return;
+    const onVisibility = () => {
+      if (document.hidden) flushPendingTurnsRef.current?.();
+      onRelayHiddenChange?.(document.hidden);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    onVisibility();
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      onRelayHiddenChange?.(false);
+    };
+  }, [isRelay, onRelayHiddenChange]);
 
   // Module-level SDK parameter; must be set before publishing for the
   // transcript timestamps to line up with the audio.
@@ -481,6 +528,12 @@ export function ClassroomAudio({
         });
     };
 
+    // Exposed for the visibility handler above. Keyed off the same `flushTurn`,
+    // so a drained turn takes the identical path a settled one would.
+    flushPendingTurnsRef.current = () => {
+      for (const key of [...pendingTurnsRef.current.keys()]) flushTurn(key);
+    };
+
     const onTranscript = (items: ToolkitItem[]) => {
       if (!isRelay) return;
       const now = Date.now();
@@ -488,6 +541,18 @@ export function ClassroomAudio({
       for (const item of items) {
         const text = typeof item.text === 'string' ? item.text.trim() : '';
         if (text.length === 0) continue;
+
+        // One-time probe. The engine documents a `user_id` on user
+        // transcriptions, which would replace the volume-level guess below
+        // outright. The toolkit overwrites `item.uid` with "0" for every human
+        // turn (it was built for a 1:1 call) but preserves the raw message in
+        // `metadata`, so the real uid should survive there. Logged once so a
+        // single session settles whether it is populated in a multi-party
+        // channel.
+        if (!loggedTranscriptShape.current) {
+          loggedTranscriptShape.current = true;
+          console.info('[classroom] transcript item shape', JSON.stringify(item));
+        }
 
         // `metadata.object` is the only reliable discriminator. The agent's uid
         // is not: when a turn was started by an injected instruction, the engine
@@ -506,21 +571,48 @@ export function ClassroomAudio({
         // on turn_id alone they collided, and because the speaker is fixed at
         // first sight, her answer inherited the instruction's attribution and
         // was logged as the teacher speaking.
-        const key = `${turnId ?? `${item.uid}:${text}`}:${isAgent ? 'agent' : 'human'}`;
+        // `stream_id` distinguishes two speakers inside one turn_id. The toolkit
+        // keys its own history on turn_id + stream_id + uid and correctly holds
+        // two separate items when two people speak within one turn; keying on
+        // turn_id alone collapsed them onto one entry here, where they
+        // overwrote each other and both were attributed to whoever spoke first.
+        const streamId = typeof item.stream_id === 'number' ? item.stream_id : 0;
+        const key = `${turnId ?? `${item.uid}:${text}`}:${streamId}:${isAgent ? 'agent' : 'human'}`;
         const existing = pendingTurnsRef.current.get(key);
 
         if (existing && existing.text === text) continue;
         if (existing) clearTimeout(existing.timer);
 
-        // Attribution is fixed at first sight. Human turns all arrive as uid
-        // "0", so the loudest recent speaker stands in — but only once, or the
-        // sentence would change owner as it grows.
+        // The engine identifies the speaker on the transcription payload
+        // itself. The toolkit overwrites `item.uid` with "0" for every human
+        // turn — it was built for a 1:1 call and has no notion of several
+        // people — but it preserves the raw message in `metadata`, so the real
+        // RTC uid survives there. Preferred over the volume poll below, which
+        // can only ever guess, and which misattributes a quiet mic, a short
+        // answer, or a fast handoff. Falls back to the guess when absent, so a
+        // payload without it behaves exactly as before.
+        const reportedUid =
+          typeof item.metadata?.user_id === 'string' &&
+          item.metadata.user_id.trim().length > 0 &&
+          item.metadata.user_id.trim() !== '0'
+            ? item.metadata.user_id.trim()
+            : undefined;
+
+        // Attribution is fixed at first sight. Where the engine did not name
+        // the speaker, the loudest recent speaker stands in — but only once, or
+        // the sentence would change owner as it grows.
         const speakerUid =
           existing?.speakerUid ??
-          (isAgent ? agentUid : (dominantSpeakerRef.current ?? uid));
+          (isAgent ? agentUid : (reportedUid ?? dominantSpeakerRef.current ?? uid));
+        // A reported uid is a fact, not a guess, so it is not scored against a
+        // runner-up the way the volume reading is.
         const attributionConfidence =
           existing?.attributionConfidence ??
-          (isAgent ? undefined : attributionConfidenceRef.current);
+          (isAgent
+            ? undefined
+            : reportedUid
+              ? 1
+              : attributionConfidenceRef.current);
 
         // A newer turn means every earlier one is definitively finished.
         for (const [otherKey, otherEntry] of pendingTurnsRef.current) {
@@ -586,6 +678,7 @@ export function ClassroomAudio({
 
     return () => {
       cancelled = true;
+      flushPendingTurnsRef.current = null;
       if (!acquired) return;
       const ai = AgoraVoiceAI.getInstance();
       if (ai) {

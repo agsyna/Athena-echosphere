@@ -143,6 +143,31 @@ export default function TeacherDashboardPage() {
   const [transcriptionLive, setTranscriptionLive] = useState(false);
   const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
   const [micError, setMicError] = useState<string | null>(null);
+  /**
+   * True while this tab is in the background.
+   *
+   * This browser is the room's transcript relay, and the relay runs on timers
+   * the browser throttles heavily once the tab is hidden — so this is not a
+   * cosmetic warning, it is the room's transcript stopping.
+   */
+  const [relayHidden, setRelayHidden] = useState(false);
+  /**
+   * Keeps the relay warning on screen briefly after the tab comes back.
+   *
+   * A banner shown only while hidden is a banner nobody can read. The teacher
+   * needs to learn what happened at the moment they return, so the notice
+   * outlives the condition by a few seconds.
+   */
+  const [relayWasHidden, setRelayWasHidden] = useState(false);
+  useEffect(() => {
+    if (relayHidden) {
+      setRelayWasHidden(true);
+      return;
+    }
+    if (!relayWasHidden) return;
+    const id = setTimeout(() => setRelayWasHidden(false), 8000);
+    return () => clearTimeout(id);
+  }, [relayHidden, relayWasHidden]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [report, setReport] = useState<SessionReport | null>(null);
@@ -807,6 +832,19 @@ export default function TeacherDashboardPage() {
         </p>
       )}
 
+      {relayWasHidden && (
+        <p
+          className="rounded-[0.625rem] border px-4 py-3 text-sm"
+          style={{ borderColor: 'var(--eco-amber)', background: 'var(--eco-amber-dim)', color: 'var(--eco-cream)' }}
+        >
+          {relayHidden
+            ? 'This tab is in the background, so the class transcript is paused.'
+            : 'The class transcript was paused while this tab was in the background.'}{' '}
+          Your browser slows down background tabs, and this page is what records
+          the room. Keep it visible to keep the transcript live.
+        </p>
+      )}
+
       {micError && (
         <p
           className="rounded-[0.625rem] border px-4 py-3 text-sm"
@@ -889,6 +927,7 @@ export default function TeacherDashboardPage() {
                 onToolkitError={setTranscriptionError}
                 onMicError={setMicError}
                 onSpeakingChange={setSpeakingUid}
+                onRelayHiddenChange={setRelayHidden}
               />
 
               {/* Stage + optional pinned transcript sidebar, side by side. */}

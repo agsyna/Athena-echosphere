@@ -121,4 +121,41 @@ t('no agent speech recorded yet: everything passes through', () => {
   assert.equal(result, 'Hello, can everyone hear me?');
 });
 
+/**
+ * The regression that matters most in practice.
+ *
+ * A student answering a question is short, and is built from the words the
+ * question used — so every one of these was a literal substring of, or a
+ * trigram-containment match against, something Athena had just said. All six
+ * were silently destroyed: not merely missing from the transcript, but dropped
+ * before the wake-phrase check, so she did not answer them either.
+ *
+ * Fixed by MIN_WHOLE_TURN_DROP_LENGTH (a whole-turn drop now needs a
+ * substantial match) and by trigramSimilarity dividing by the union rather
+ * than the smaller set.
+ */
+t('short student answers built from her own words survive', () => {
+  const session = createSession('test');
+  rememberAgentUtterance(
+    session,
+    'So, can anyone tell me what a common denominator is?',
+  );
+  rememberAgentUtterance(
+    session,
+    'A fraction has a numerator on top and a denominator on the bottom.',
+  );
+  rememberAgentUtterance(session, "That's right, the answer is four. Well done!");
+
+  for (const answer of [
+    'a common denominator',
+    'the answer is four',
+    "Yes, that's right",
+    'a numerator on top',
+    'the denominator on the bottom',
+    'what is a common denominator',
+  ]) {
+    assert.equal(stripSelfEcho(session, answer), answer, `dropped: ${answer}`);
+  }
+});
+
 console.log(`\n${pass} passing`);

@@ -631,6 +631,7 @@ const DENIAL_LABEL: Record<string, string> = {
   TOPIC_DISABLED: 'blocked — topic disabled',
   SILENCE_GAP_TOO_SHORT: 'blocked — no natural pause yet',
   TOPIC_RECENTLY_ADDRESSED: 'held back — she just covered this',
+  QUIZ_PAYLOAD_MISSING: 'quiz asked, but the question card never arrived',
   NO_SESSION: 'blocked — session not found',
 };
 

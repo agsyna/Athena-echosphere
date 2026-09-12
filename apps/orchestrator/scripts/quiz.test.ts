@@ -15,6 +15,7 @@ import {
   applyControl,
   ingestTranscript,
   maybeAdvanceQuizSet,
+  recordQuizInSet,
   startQuiz,
   submitQuizAnswer,
   sweepExpiredQuiz,
@@ -325,8 +326,12 @@ await t('a set whose quiz arrived twice still advances past question 1', async (
 
   applyControl(session, { quiz: control });               // relay
   const viaPoll = applyControl(session, { quiz: control }); // history poll
-  // issueSetQuestion registers whatever the poll path returned.
-  if (viaPoll.quiz) session.activeQuizSet.quizIds.push(viaPoll.quiz.quizId);
+  // issueSetQuestion registers whatever the poll path returned — through the
+  // same idempotent helper applyControl itself uses, so a payload seen by BOTH
+  // paths is recorded exactly once. It used to be a raw `quizIds.push` here,
+  // which double-counted the question against `set.total` the moment
+  // applyControl started recording it too.
+  if (viaPoll.quiz) recordQuizInSet(session, viaPoll.quiz);
 
   assert.equal(
     session.activeQuizSet.quizIds.length,

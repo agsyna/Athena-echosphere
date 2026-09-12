@@ -50,6 +50,16 @@ export type SpeakDenialReason =
    * SILENCE_GAP_TOO_SHORT so the teacher panel can say which restraint fired.
    */
   | 'TOPIC_RECENTLY_ADDRESSED'
+  /**
+   * A quiz question was spoken but its {quiz} control payload never reached the
+   * orchestrator by either delivery path, so no card could be shown.
+   *
+   * Not a restraint decision at all — the floor was granted. It reports a
+   * delivery failure, and it exists because this case used to be published as
+   * SILENCE_GAP_TOO_SHORT, which told the teacher the opposite of what had
+   * happened.
+   */
+  | 'QUIZ_PAYLOAD_MISSING'
   | 'NO_SESSION';
 
 export type SpeakDecision =

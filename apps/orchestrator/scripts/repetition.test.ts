@@ -291,7 +291,7 @@ await t('"Option B" is scored even though the echo filter discards the turn', as
   assert.equal(answers[0]?.via, 'voice');
 });
 
-await t('a rescued answer stays out of the transcript and out of the gap detector', async () => {
+await t('an answer spoken into a quiet room is logged as that student speaking', async () => {
   const { session, ana } = classroom();
   await askQuiz(session);
   releaseFloor(session);
@@ -299,7 +299,27 @@ await t('a rescued answer stays out of the transcript and out of the gap detecto
 
   await ingestTranscript(session, { uid: ana.uid, text: 'Option c six', isFinal: true, turnId: 2 });
 
-  assert.equal(session.transcript.length, before, 'an echo-shaped turn is still not logged as speech');
+  // This used to assert the opposite. The echo filter discarded every short
+  // turn that reused her words, so a spoken answer never reached the
+  // transcript at all and had to be recovered by `maybeRescueSpokenQuizAnswer`
+  // purely to be scored. With the whole-turn drop gated on her audio actually
+  // playing (see MIN_WHOLE_TURN_DROP_LENGTH and the `agentSpeaking` argument),
+  // a student answering into a quiet room is recognised as what it is: their
+  // speech, under their name, in the class transcript.
+  //
+  // The echo protections are unchanged and still covered by the two tests
+  // below — her full option list is still dropped, and nothing is rescued or
+  // logged while she is mid-sentence.
+  assert.equal(
+    session.transcript.length,
+    before + 1,
+    'a student answering out loud belongs in the transcript',
+  );
+  assert.equal(
+    session.transcript.at(-1)?.participantId,
+    ana.participantId,
+    'and it belongs to the student who said it',
+  );
   assert.equal(
     pendingClassWideGap(session),
     undefined,
