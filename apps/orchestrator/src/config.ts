@@ -1,10 +1,12 @@
 /**
  * Orchestrator configuration, resolved once at boot.
  *
- * Agora credentials are the only required values, and they are the only
- * credentials this project has: speech recognition, the model and the voice are
- * all resold through the Agora project, so there is no second vendor key to
- * manage, rotate, or leak. `agora project env write` produces everything below.
+ * The Agora pair below is the deployment's SHARED project — the fallback used
+ * for any lesson whose teacher has not supplied their own (see
+ * agora/credentials.ts). Speech recognition, the model and the voice are all
+ * resold through whichever Agora project a lesson runs on, so there is no
+ * second vendor key to manage, rotate, or leak. `agora project env write`
+ * produces everything below.
  */
 
 export type LlmVendor = 'agora' | 'groq';
@@ -32,8 +34,25 @@ export const config = {
   port: Number(process.env.PORT ?? 8787),
   host: process.env.HOST ?? '0.0.0.0',
 
-  agoraAppId: required('NEXT_PUBLIC_AGORA_APP_ID'),
-  agoraAppCertificate: required('NEXT_AGORA_APP_CERTIFICATE'),
+  /**
+   * Shared Agora project, used when a lesson's teacher has not brought their
+   * own. Optional since teachers can supply credentials per account: a
+   * deployment may legitimately run with neither set, in which case an
+   * anonymous teacher (or one who has saved nothing) is refused at lesson
+   * creation with a message saying so, rather than the whole service refusing
+   * to boot. `warnIfSharedAgoraMissing()` flags the gap in the boot log.
+   */
+  agoraAppId: process.env.NEXT_PUBLIC_AGORA_APP_ID ?? '',
+  agoraAppCertificate: process.env.NEXT_AGORA_APP_CERTIFICATE ?? '',
+
+  /**
+   * Key that App Certificates saved by teachers are encrypted under at rest
+   * (AES-256-GCM; any string works, it is hashed to 32 bytes). Required only
+   * once a teacher tries to save credentials — without it the save is refused
+   * with a clear error and the deployment keeps running on the shared project.
+   * Rotating it invalidates every saved certificate: teachers re-enter theirs.
+   */
+  credentialsEncryptionKey: process.env.CREDENTIALS_ENCRYPTION_KEY ?? '',
 
   /**
    * Which LLM drives the in-call agent.
@@ -225,3 +244,14 @@ export const config = {
    */
   boardLlmModel: process.env.BOARD_LLM_MODEL ?? '',
 } as const;
+
+/** Boot-time notice: nothing is broken yet, but every lesson needs a teacher-supplied project. */
+export function warnIfSharedAgoraMissing(): void {
+  if (!config.agoraAppId || !config.agoraAppCertificate) {
+    console.warn(
+      '[config] NEXT_PUBLIC_AGORA_APP_ID / NEXT_AGORA_APP_CERTIFICATE are not set. ' +
+        'There is no shared Agora project: only teachers who have saved their own ' +
+        'Agora credentials (or pass them when creating a lesson) can start a class.',
+    );
+  }
+}

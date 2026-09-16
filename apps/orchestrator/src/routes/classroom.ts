@@ -93,6 +93,10 @@ import { anamConfigured, mintAnamSessionToken } from '../agent/anam.js';
 import { presentModel, stopModel } from '../models/modelSession.js';
 import { config } from '../config.js';
 import {
+  AgoraCredentialError,
+  resolveCredentialsForLesson,
+} from '../agora/credentials.js';
+import {
   UNLIKE_FRACTIONS_TITLE,
   seedUnlikeFractionsLesson,
 } from '../lesson/demoUnlikeFractions.js';
@@ -162,6 +166,14 @@ export async function classroomRoutes(app: FastifyInstance): Promise<void> {
       .object({
         title: z.string().min(1).max(140).optional(),
         seed: z.enum(['unlike-fractions']).optional(),
+        /**
+         * An Agora project for this one lesson. The escape hatch for a teacher
+         * with no account to save credentials against — a signed-in teacher
+         * saves theirs once via /api/me/agora-credentials instead.
+         */
+        agora: z
+          .object({ appId: z.string(), appCertificate: z.string() })
+          .optional(),
       })
       .parse(request.body ?? {});
     const title =
@@ -169,7 +181,19 @@ export async function classroomRoutes(app: FastifyInstance): Promise<void> {
       (body.seed === 'unlike-fractions'
         ? UNLIKE_FRACTIONS_TITLE
         : 'Untitled lesson');
-    const session = createSession(title, auth.teacher);
+
+    // Pinned now, for the lesson's whole life — see agora/credentials.ts.
+    let agora;
+    try {
+      agora = await resolveCredentialsForLesson(auth.teacher, body.agora);
+    } catch (error) {
+      if (error instanceof AgoraCredentialError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      throw error;
+    }
+
+    const session = createSession(title, auth.teacher, agora);
     if (body.seed === 'unlike-fractions') {
       seedUnlikeFractionsLesson(session.lesson);
     }
@@ -209,7 +233,7 @@ export async function classroomRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const participant = addParticipant(session, body);
-    const tokens = mintTokens(session.channel, participant.uid);
+    const tokens = mintTokens(session.channel, participant.uid, session.agora);
 
     broadcastParticipantJoined(session, participant.participantId);
 
@@ -219,7 +243,7 @@ export async function classroomRoutes(app: FastifyInstance): Promise<void> {
       channel: session.channel,
       rtcToken: tokens.rtcToken,
       rtmToken: tokens.rtmToken,
-      appId: config.agoraAppId,
+      appId: session.agora.appId,
       agentUid: AGENT_UID,
       role: participant.role,
       sessionId: session.sessionId,
@@ -293,9 +317,15 @@ export async function classroomRoutes(app: FastifyInstance): Promise<void> {
       return reply.send({ agentId, state: 'RUNNING' });
     } catch (error) {
       request.log.error({ err: error }, 'Failed to start agent');
-      return reply
-        .code(502)
-        .send({ error: error instanceof Error ? error.message : 'Failed to start agent' });
+      const message = error instanceof Error ? error.message : 'Failed to start agent';
+      // A join failure on the shared project is, in practice, almost always
+      // its free-tier minutes running out — the one thing the teacher can fix
+      // themselves, so say where.
+      const hint =
+        session.agora.source === 'env'
+          ? ' This lesson is on the shared Agora project; if its quota is used up, add your own App ID and App Certificate on the join screen and start a new lesson.'
+          : ' This lesson is on your own Agora project — check the App ID and App Certificate you entered, and that the project has Conversational AI enabled.';
+      return reply.code(502).send({ error: message + hint });
     }
   });
 
@@ -1522,6 +1552,8 @@ function publicSession(session: ClassroomSession) {
     endedAt: session.endedAt,
     participantCount: activeParticipants(session).length,
     agentId: session.agentId,
+    /** 'env' = shared deployment project; 'teacher' / 'session' = the teacher's own. */
+    agoraSource: session.agora.source,
   };
 }
 

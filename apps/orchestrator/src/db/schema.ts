@@ -50,6 +50,22 @@ export const teacherProfiles = pgTable('teacher_profiles', {
   displayName: text('display_name'),
   firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull(),
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull(),
+
+  /**
+   * The teacher's own Agora project, if they have supplied one.
+   *
+   * Lessons this teacher creates run on these credentials instead of the
+   * deployment's shared NEXT_PUBLIC_AGORA_APP_ID / NEXT_AGORA_APP_CERTIFICATE
+   * pair, so one exhausted free-tier quota no longer takes every classroom
+   * down with it. The App ID is public (it ships to every browser that joins)
+   * and is stored as-is; the App Certificate is a secret and is stored only
+   * AES-256-GCM encrypted under CREDENTIALS_ENCRYPTION_KEY — see
+   * agora/credentials.ts. Both null means "use the deployment's shared
+   * project".
+   */
+  agoraAppId: text('agora_app_id'),
+  agoraAppCertificateEnc: text('agora_app_certificate_enc'),
+  agoraUpdatedAt: timestamp('agora_updated_at', { withTimezone: true }),
 });
 
 export const sessions = pgTable(

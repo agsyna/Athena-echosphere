@@ -56,6 +56,37 @@ Credentials mode and mints the ConvoAI token itself.
 > **After changing credentials, fully restart both servers.** `NEXT_PUBLIC_*` is
 > baked in when the web server starts.
 
+#### Teachers can bring their own Agora project
+
+The pair above is the deployment's **shared** project, and Agora's free tier
+meters it — once its minutes run out, every classroom stops until someone
+rotates the env vars and redeploys. So the join screen has an **Agora project**
+panel (under *Join as teacher*) where a teacher enters their own App ID and App
+Certificate:
+
+- **Signed in** (`/login`): saved to their account in the orchestrator's
+  Postgres; every lesson they create, on any device, runs on their project.
+  The certificate is stored AES-256-GCM encrypted and is never returned by the
+  API. This needs `DATABASE_URL` plus one new orchestrator env var:
+
+  ```
+  CREDENTIALS_ENCRYPTION_KEY=<any long random string>   # openssl rand -hex 32
+  ```
+
+  and the migration applied: `pnpm --filter @echosphere/orchestrator db:migrate`.
+  Rotating the key invalidates every saved certificate (teachers re-enter theirs).
+
+- **Not signed in**: kept in that browser's localStorage and sent with each
+  lesson the teacher creates from it (`agora` field on `POST /api/sessions`).
+
+Nothing entered means the shared project, exactly as before. The project is
+resolved once at lesson creation and pinned to the session, so token minting,
+the ConvoAI agent join, and the App ID each student receives all come from the
+same place — and a teacher editing credentials mid-class does not affect a
+running lesson. The env pair is now optional: with neither shared credentials
+nor a teacher-supplied pair, lesson creation is refused with a message saying
+which to add, rather than the orchestrator refusing to boot.
+
 ### 2. Install and run
 
 ```bash

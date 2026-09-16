@@ -9,11 +9,12 @@
 
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
-import { config } from './config.js';
+import { config, warnIfSharedAgoraMissing } from './config.js';
 import { registerErrorHandler } from './errors.js';
 import { classroomRoutes } from './routes/classroom.js';
 import { inspectRoutes } from './routes/inspect.js';
 import { completionsRoutes } from './routes/completions.js';
+import { agoraCredentialRoutes } from './routes/agoraCredentials.js';
 import { considerSilenceInterjection } from './classroomController.js';
 import { listSessions } from './state/sessionRegistry.js';
 import { modelResolution, stopAllAgents } from './agent/agentLifecycle.js';
@@ -69,6 +70,7 @@ app.get('/health', async () => {
 await app.register(classroomRoutes);
 await app.register(inspectRoutes);
 await app.register(completionsRoutes);
+await app.register(agoraCredentialRoutes);
 
 /**
  * The silence tick. Kept out of the request path because the condition it
@@ -97,6 +99,7 @@ process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
 // Surfaced at boot as well as on /health: an operator who mistypes LLM_MODEL
 // never thinks to call /health, because as far as they know the model changed.
+warnIfSharedAgoraMissing();
 const startupModel = modelResolution();
 if (!startupModel.supported) {
   app.log.warn(

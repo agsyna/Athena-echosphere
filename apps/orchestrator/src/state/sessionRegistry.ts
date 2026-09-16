@@ -36,6 +36,7 @@ import {
 import { initialFloor } from '../floor/floorMachine.js';
 import type { LessonStore } from '../lesson/lessonStore.js';
 import { createLessonStore } from '../lesson/lessonStore.js';
+import { envCredentials, type AgoraCredentials } from '../agora/credentials.js';
 
 /** How many transcript segments the rolling context window keeps (§3.4). */
 const ROLLING_TRANSCRIPT_WINDOW = 40;
@@ -73,6 +74,15 @@ export interface ClassroomSession {
    * so the report route can check the caller is the owner.
    */
   owner: SessionOwner | null;
+
+  /**
+   * The Agora project this lesson runs on, resolved once at creation (see
+   * agora/credentials.ts) and pinned for the lesson's life. Every token this
+   * session mints, the agent's join, and the App ID each browser receives all
+   * read from here rather than from config, so a teacher on their own project
+   * never touches the shared one.
+   */
+  agora: AgoraCredentials;
 
   /** Runtime agent id returned by ConvoAI /join. Null until the agent is started. */
   agentId: string | null;
@@ -309,6 +319,9 @@ function generate4DigitShareCode(): string {
 export function createSession(
   title: string,
   owner: SessionOwner | null = null,
+  // Defaults to the shared project so the many test call sites stay
+  // `createSession('t')`; the HTTP route always resolves and passes one.
+  agora: AgoraCredentials = envCredentials(),
 ): ClassroomSession {
   const sessionId = generate4DigitShareCode();
   const now = Date.now();
@@ -320,6 +333,7 @@ export function createSession(
     createdAt: now,
     endedAt: null,
     owner,
+    agora,
     agentId: null,
     participants: new Map(),
     uidToParticipantId: new Map(),

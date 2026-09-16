@@ -15,6 +15,13 @@
       "when": 1788953275009,
       "tag": "0001_skinny_blindfold",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789550734984,
+      "tag": "0002_agora_credentials",
+      "breakpoints": true
     }
   ]
 }

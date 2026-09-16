@@ -51,6 +51,7 @@ import {
 import { GREETING, buildClassroomInstructions, getGreetingForLanguage } from './prompt.js';
 import { AGENT_UID, type ClassroomSession } from '../state/sessionRegistry.js';
 import { config } from '../config.js';
+import { assertUsable } from '../agora/credentials.js';
 import { isReasoningModel, reasoningHeadroom } from '../llm/reasoning.js';
 
 /**
@@ -221,10 +222,13 @@ export async function startAgent(session: ClassroomSession): Promise<string> {
     return existing.id as string;
   }
 
+  // The lesson's own project (resolved at creation), not the shared config
+  // pair — see agora/credentials.ts.
+  assertUsable(session.agora);
   const client = new AgoraClient({
     area: Area.US,
-    appId: config.agoraAppId,
-    appCertificate: config.agoraAppCertificate,
+    appId: session.agora.appId,
+    appCertificate: session.agora.appCertificate,
   });
 
   const greeting = getGreetingForLanguage(session.language);

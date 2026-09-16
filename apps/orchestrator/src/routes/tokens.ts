@@ -13,7 +13,7 @@
 
 import { createRequire } from 'node:module';
 import type * as AgoraToken from 'agora-token';
-import { config } from '../config.js';
+import { assertUsable, type AgoraCredentials } from '../agora/credentials.js';
 
 // `agora-token` is CommonJS and builds its exports with `require(...).X` inside
 // an object literal, which Node's ESM named-export detection cannot see — a
@@ -31,7 +31,14 @@ export interface MintedTokens {
   expiresAt: number;
 }
 
-export function mintTokens(channel: string, uid: string): MintedTokens {
+/**
+ * `agora` is the lesson's own pinned project (`session.agora`), never read
+ * from config here: a teacher on their own project must never be issued a
+ * token signed by the shared one, which Agora would reject at join as an
+ * opaque "invalid token".
+ */
+export function mintTokens(channel: string, uid: string, agora: AgoraCredentials): MintedTokens {
+  assertUsable(agora);
   const expireAt = Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS;
 
   // The browser joins RTC with a numeric uid (`parseInt(uid, 10)` in
@@ -42,8 +49,8 @@ export function mintTokens(channel: string, uid: string): MintedTokens {
   // (references/server/tokens.md) and nothing guarantees they stay aliased —
   // matching the builder to the join type keeps this correct if they diverge.
   const rtcToken = RtcTokenBuilder.buildTokenWithUid(
-    config.agoraAppId,
-    config.agoraAppCertificate,
+    agora.appId,
+    agora.appCertificate,
     channel,
     Number(uid),
     RtcRole.PUBLISHER,
@@ -52,8 +59,8 @@ export function mintTokens(channel: string, uid: string): MintedTokens {
   );
 
   const rtmToken = RtmTokenBuilder.buildToken(
-    config.agoraAppId,
-    config.agoraAppCertificate,
+    agora.appId,
+    agora.appCertificate,
     uid,
     expireAt,
   );

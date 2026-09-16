@@ -38,6 +38,27 @@ export interface SessionSummary {
   endedAt: number | null;
   participantCount: number;
   agentId: string | null;
+  /**
+   * Which Agora project the lesson runs on: 'env' is the deployment's shared
+   * project, 'teacher' the account's saved one, 'session' a pair supplied
+   * when the lesson was created.
+   */
+  agoraSource: 'teacher' | 'session' | 'env';
+}
+
+/** An Agora project a teacher brings, instead of the deployment's shared one. */
+export interface AgoraCredentialInput {
+  appId: string;
+  appCertificate: string;
+}
+
+/** What the orchestrator reports about a signed-in teacher's saved project. Never the certificate. */
+export interface AgoraCredentialStatus {
+  appId: string | null;
+  hasCertificate: boolean;
+  updatedAt: number | null;
+  /** False when the deployment has no shared project — every teacher must bring their own. */
+  sharedAvailable: boolean;
 }
 
 /** What a participant needs to connect to Agora, issued only after joining. */
@@ -104,10 +125,32 @@ export const orchestrator = {
 
   listSessions: () => request<SessionSummary[]>('/api/sessions'),
 
-  createSession: (title: string, seed?: 'unlike-fractions') =>
+  createSession: (
+    title: string,
+    seed?: 'unlike-fractions',
+    // For a teacher with no account: their own Agora project, for this lesson
+    // only. A signed-in teacher's saved project is picked up server-side.
+    agora?: AgoraCredentialInput,
+  ) =>
     request<SessionSummary>('/api/sessions', {
       method: 'POST',
-      body: JSON.stringify({ title, seed }),
+      body: JSON.stringify({ title, seed, agora }),
+    }),
+
+  // ── Own Agora project (signed-in teachers) ─────────────────────────────
+
+  getAgoraCredentials: () =>
+    request<AgoraCredentialStatus>('/api/me/agora-credentials'),
+
+  saveAgoraCredentials: (input: AgoraCredentialInput) =>
+    request<AgoraCredentialStatus>('/api/me/agora-credentials', {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    }),
+
+  clearAgoraCredentials: () =>
+    request<AgoraCredentialStatus>('/api/me/agora-credentials', {
+      method: 'DELETE',
     }),
 
   getRoom: (sessionId: string) =>

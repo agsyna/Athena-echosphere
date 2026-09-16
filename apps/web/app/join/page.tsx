@@ -10,9 +10,11 @@ import { SpaceJoinBackground } from '@/components/SpaceJoinBackground';
 import { Bell, ExternalLink, Palette, X } from 'lucide-react';
 import type { Role } from '@echosphere/shared-types';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { AgoraCredentialsPanel } from '@/components/AgoraCredentialsPanel';
 import {
   orchestrator,
   storeIdentity,
+  type AgoraCredentialInput,
   type SessionSummary,
 } from '@/lib/orchestrator';
 
@@ -50,6 +52,13 @@ export default function JoinPage() {
   const [error, setError] = useState<string | null>(null);
   const [reachable, setReachable] = useState<boolean | null>(null);
   const [doodleOpen, setDoodleOpen] = useState(false);
+  // An anonymous teacher's own Agora project, sent with each lesson they
+  // create. Null for signed-in teachers (resolved server-side) and for anyone
+  // on the shared project. See components/AgoraCredentialsPanel.tsx.
+  const [agoraOverride, setAgoraOverride] = useState<AgoraCredentialInput | null>(null);
+  const onAgoraChange = useCallback((creds: AgoraCredentialInput | null) => {
+    setAgoraOverride(creds);
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -101,6 +110,7 @@ export default function JoinPage() {
             ? 'Adding unlike fractions'
             : newTitle.trim() || 'Untitled lesson',
           seed,
+          agoraOverride ?? undefined,
         );
         await join(session.sessionId);
       } catch (err) {
@@ -108,7 +118,7 @@ export default function JoinPage() {
         setBusy(false);
       }
     },
-    [newTitle, join],
+    [newTitle, join, agoraOverride],
   );
 
   const nameValid = displayName.trim().length > 0;
@@ -372,6 +382,9 @@ export default function JoinPage() {
                     Enter your name above first.
                   </p>
                 )}
+                <div className="mt-2">
+                  <AgoraCredentialsPanel onChange={onAgoraChange} />
+                </div>
               </div>
             )}
           </section>
