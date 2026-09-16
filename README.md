@@ -61,8 +61,9 @@ Credentials mode and mints the ConvoAI token itself.
 The pair above is the deployment's **shared** project, and Agora's free tier
 meters it — once its minutes run out, every classroom stops until someone
 rotates the env vars and redeploys. So the join screen has an **Agora project**
-panel (under *Join as teacher*) where a teacher enters their own App ID and App
-Certificate:
+panel (under *Join as teacher*) where a teacher must enter their own App ID and
+App Certificate before the Create / Join buttons enable (the ? icon lists where
+to find them in Agora Console):
 
 - **Signed in** (`/login`): saved to their account in the orchestrator's
   Postgres; every lesson they create, on any device, runs on their project.
@@ -79,8 +80,10 @@ Certificate:
 - **Not signed in**: kept in that browser's localStorage and sent with each
   lesson the teacher creates from it (`agora` field on `POST /api/sessions`).
 
-Nothing entered means the shared project, exactly as before. The project is
-resolved once at lesson creation and pinned to the session, so token minting,
+The requirement is enforced in the UI only: the orchestrator still falls back
+to the shared project for a request that arrives without one, so students and
+scripted callers are unaffected. The project is resolved once at lesson
+creation and pinned to the session, so token minting,
 the ConvoAI agent join, and the App ID each student receives all come from the
 same place — and a teacher editing credentials mid-class does not affect a
 running lesson. The env pair is now optional: with neither shared credentials

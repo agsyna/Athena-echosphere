@@ -10,7 +10,10 @@ import { SpaceJoinBackground } from '@/components/SpaceJoinBackground';
 import { Bell, ExternalLink, Palette, X } from 'lucide-react';
 import type { Role } from '@echosphere/shared-types';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { AgoraCredentialsPanel } from '@/components/AgoraCredentialsPanel';
+import {
+  AgoraCredentialsPanel,
+  type AgoraPanelState,
+} from '@/components/AgoraCredentialsPanel';
 import {
   orchestrator,
   storeIdentity,
@@ -52,13 +55,13 @@ export default function JoinPage() {
   const [error, setError] = useState<string | null>(null);
   const [reachable, setReachable] = useState<boolean | null>(null);
   const [doodleOpen, setDoodleOpen] = useState(false);
-  // An anonymous teacher's own Agora project, sent with each lesson they
-  // create. Null for signed-in teachers (resolved server-side) and for anyone
-  // on the shared project. See components/AgoraCredentialsPanel.tsx.
-  const [agoraOverride, setAgoraOverride] = useState<AgoraCredentialInput | null>(null);
-  const onAgoraChange = useCallback((creds: AgoraCredentialInput | null) => {
-    setAgoraOverride(creds);
-  }, []);
+  // Teachers must have an Agora project on file before they can create or
+  // join a lesson. `override` is an anonymous teacher's pair, sent with each
+  // lesson they create; a signed-in teacher's is resolved server-side. See
+  // components/AgoraCredentialsPanel.tsx.
+  const [agora, setAgora] = useState<AgoraPanelState>({ ready: false, override: null });
+  const onAgoraState = useCallback((state: AgoraPanelState) => setAgora(state), []);
+  const agoraOverride: AgoraCredentialInput | null = agora.override;
 
   const refresh = useCallback(async () => {
     try {
@@ -122,6 +125,8 @@ export default function JoinPage() {
   );
 
   const nameValid = displayName.trim().length > 0;
+  // Students only need a name; teachers also need their Agora project.
+  const canJoin = nameValid && (role === 'student' || agora.ready);
 
   return (
   <SpaceJoinBackground>
@@ -349,7 +354,8 @@ export default function JoinPage() {
 
             {role === 'teacher' && (
               <div className="flex flex-col gap-2 border-t pt-5" style={{ borderColor: 'var(--eco-rule)' }}>
-                <h2 className="eco-label-dim">Start a new lesson</h2>
+                <AgoraCredentialsPanel onState={onAgoraState} />
+                <h2 className="eco-label-dim mt-3">Start a new lesson</h2>
                 <div className="flex gap-2">
                   <input
                     className="flex-1 rounded-lg border px-3 py-2 text-sm text-[var(--eco-cream)] outline-none transition-colors focus:border-[var(--eco-glow)]"
@@ -360,7 +366,7 @@ export default function JoinPage() {
                   />
                   <button
                     type="button"
-                    disabled={!nameValid || busy}
+                    disabled={!canJoin || busy}
                     onClick={() => void createAndJoin()}
                     className="rounded-lg px-4 py-2 text-sm font-medium transition-opacity disabled:opacity-40"
                     style={{ background: 'var(--eco-athena)', color: 'var(--eco-ink)' }}
@@ -370,21 +376,22 @@ export default function JoinPage() {
                 </div>
                 <button
                   type="button"
-                  disabled={!nameValid || busy}
+                  disabled={!canJoin || busy}
                   onClick={() => void createAndJoin('unlike-fractions')}
                   className="self-start rounded-lg border px-3 py-1.5 text-sm text-[var(--eco-cream)] disabled:opacity-40"
                   style={{ borderColor: 'var(--eco-rule)' }}
                 >
                   Start fractions demo (LCD)
                 </button>
-                {!nameValid && (
+                {!nameValid ? (
                   <p className="text-xs text-[var(--eco-cream-faint)]">
                     Enter your name above first.
                   </p>
-                )}
-                <div className="mt-2">
-                  <AgoraCredentialsPanel onChange={onAgoraChange} />
-                </div>
+                ) : !agora.ready ? (
+                  <p className="text-xs text-[var(--eco-cream-faint)]">
+                    Add your Agora project above first.
+                  </p>
+                ) : null}
               </div>
             )}
           </section>
@@ -441,7 +448,7 @@ export default function JoinPage() {
                 />
                 <button
                   type="button"
-                  disabled={!nameValid || busy || shareCodeInput.length === 0}
+                  disabled={!canJoin || busy || shareCodeInput.length === 0}
                   onClick={() => void join(shareCodeInput)}
                   className="rounded-lg px-4 py-2 text-sm font-semibold transition-opacity disabled:opacity-40"
                   style={{ background: 'var(--eco-athena)', color: 'var(--eco-ink)' }}
@@ -509,7 +516,7 @@ export default function JoinPage() {
                   </div>
                   <button
                     type="button"
-                    disabled={!nameValid || busy}
+                    disabled={!canJoin || busy}
                     onClick={() => {
                       setSelectedSessionId(session.sessionId);
                       void join(session.sessionId);
